@@ -183,6 +183,16 @@ func void update()
 
 		case e_state_game:
 		{
+			#ifdef m_debug
+			if(is_key_pressed(c_key_add))
+			{
+				game->beat_level = true;
+			}
+			if(is_key_pressed(c_key_subtract))
+			{
+				game->go_to_previous_level = true;
+			}
+			#endif // m_debug
 
 			s_ball* ball = &game->ball;
 			s_paddle* paddle = &game->paddle;
@@ -198,7 +208,9 @@ func void update()
 			if(game->reset_game)
 			{
 				game->reset_game = false;
+				game->current_level = 0;
 				game->reset_level = true;
+				level = game->levels[game->current_level];
 			}
 			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		reset game end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -210,6 +222,7 @@ func void update()
 				game->pickups.count = 0;
 				game->score = 0;
 				ball->speed = level.ball_speed;
+				ball->hit_time = 0;
 				ball->x = c_half_res.x;
 				if(rng->rand_bool())
 				{
@@ -236,12 +249,26 @@ func void update()
 				ball->x = paddle->x - (level.paddle_size.x / 2.0f * ball->dir.x) - (level.ball_radius * ball->dir.x);
 				paddle->x += c_base_res.x * -ball->dir.x;
 				paddle->x += level.paddle_size.x * ball->dir.x;
-				paddle->y = rng->randf_range(level.paddle_size.y / 2, c_base_res.y - level.paddle_size.y / 2);
+
+				// @Note(tkap, 08/07/2023): Place paddle at random position that doesn't overlap with previous position
+				{
+					float prev_paddle_y = paddle->y;
+					int attempts = 0;
+					while(attempts < 100)
+					{
+						paddle->y = rng->randf_range(level.paddle_size.y / 2, c_base_res.y - level.paddle_size.y / 2);
+						if(fabsf(paddle->y - prev_paddle_y) > level.paddle_size.y) { break; }
+						attempts++;
+					}
+				}
 				ball->dir.x = -ball->dir.x;
-				ball->speed += 100;
+				ball->speed += level.speed_boost;
 				g_platform_funcs.play_sound(game->jump_sound);
-				game->score += 1;
-				game->max_score = at_least(game->max_score, game->score);
+
+				if(level.paddles_give_score)
+				{
+					game->score += 1;
+				}
 				ball->hit_time = c_ball_hit_time;
 
 				for(int i = 0; i < 100; i++)
@@ -260,14 +287,17 @@ func void update()
 					game->particles.add_checked(p);
 				}
 
-				if(rng->chance100(25))
+				if(level.spawn_pickups)
 				{
-					s_pickup pickup = zero;
-					float radius = c_half_res.x * (c_base_res.y / c_base_res.x);
-					float angle = rng->randf32() * tau;
-					pickup.x = cosf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.x;
-					pickup.y = sinf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.y;
-					game->pickups.add_checked(pickup);
+					// if(rng->chance100(25))
+					{
+						s_pickup pickup = zero;
+						float radius = c_half_res.x * (c_base_res.y / c_base_res.x);
+						float angle = rng->randf32() * tau;
+						pickup.x = cosf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.x;
+						pickup.y = sinf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.y;
+						game->pickups.add_checked(pickup);
+					}
 				}
 
 			}
@@ -276,7 +306,8 @@ func void update()
 			{
 				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
 				{
-					ball->speed -= 100;
+					// ball->speed -= 100;
+					game->score += 1;
 					game->pickups.remove_and_swap(pickup_i--);
 
 					for(int i = 0; i < 100; i++)
@@ -308,14 +339,58 @@ func void update()
 
 			if(game->score >= level.score_to_beat)
 			{
-				game->current_level += 1;
+				game->beat_level = true;
+			}
+
+			if(game->beat_level)
+			{
+				game->beat_level = false;
+				if(game->current_level == game->levels.count - 1)
+				{
+					game->state = e_state_victory;
+					g_platform_data.any_key_pressed = false;
+				}
+				else
+				{
+					game->current_level += 1;
+				}
 				game->score = 0;
 				ball->speed = game->levels[game->current_level].ball_speed;
 				g_platform_funcs.play_sound(game->win_sound);
 				game->reset_level = true;
 			}
 
+			#ifdef m_debug
+			if(game->go_to_previous_level)
+			{
+				game->go_to_previous_level = false;
+				if(game->current_level > 0)
+				{
+					game->current_level -= 1;
+					game->reset_level = true;
+				}
+			}
+			#endif // m_debug
+
 		} break;
+
+		case e_state_victory:
+		{
+			game->title_color = v3(sinf2(game->total_time), 1, 1);
+
+			if(is_key_pressed(c_key_escape))
+			{
+				exit(0);
+			}
+			else if(g_platform_data.any_key_pressed)
+			{
+				game->state = e_state_game;
+				game->reset_game = true;
+			}
+		} break;
+
+		invalid_default_case;
+
 	}
 
 	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update particles start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -352,14 +427,29 @@ func void render(float dt)
 			draw_circle(game->ball.pos, 5, level.ball_radius, get_ball_color(game->ball));
 			draw_rect(game->paddle.pos, 10, level.paddle_size, v4(1));
 
-			draw_text(format_text("%i", game->score), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
+			// draw_text(format_text("%i", game->score), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
+			int points_left = level.score_to_beat - game->score;
+			draw_text(format_text("%i point%s left", points_left, handle_plural(points_left)), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 
 			foreach_raw(pickup_i, pickup, game->pickups)
 			{
 				draw_circle(pickup.pos, 4, level.ball_radius, v4(0, 1, 0, 1));
 				draw_circle(pickup.pos, 4, level.ball_radius * 2, v4(0, 1, 0, 0.25f));
 			}
+
+			draw_text(format_text("Level: %i", game->current_level + 1), v2(0,0), 4, make_color(1), e_font_medium, false);
 		} break;
+
+		case e_state_victory:
+		{
+			draw_text("Congratulations! You win!", v2(c_half_res.x, c_base_res.y * 0.3f), 15, v4(hsv_to_rgb(game->title_color), 1), e_font_big, true);
+			draw_text("Press Any Key to Replay", v2(c_half_res.x, c_base_res.y * 0.5f), 15, v4(1), e_font_big, true);
+			draw_text("Press Escape to Exit", v2(c_half_res.x, c_base_res.y * 0.6f), 15, v4(1), e_font_big, true);
+			draw_text("Get the source code at https://github.com/Tkap1/gmtk_jam_gnop", v2(c_half_res.x, c_base_res.y * 0.8f), 15, make_color(0.5f), e_font_medium, true);
+			draw_text("Made Live at twitch.tv/Tkap1", v2(c_half_res.x, c_base_res.y * 0.9f), 15, make_color(0.5f), e_font_medium, true);
+		} break;
+
+		invalid_default_case;
 	}
 
 	foreach_raw(particle_i, particle, game->particles)
@@ -461,7 +551,6 @@ func b8 check_for_shader_errors(u32 id, char* out_error)
 	}
 	return true;
 }
-
 
 func s_font load_font(const char* path, float font_size, s_lin_arena* arena)
 {
@@ -701,15 +790,18 @@ func s_v4 get_ball_color(s_ball ball)
 func s_level make_level()
 {
 	s_level level = zero;
+	level.speed_boost = 100;
 	level.ball_radius = 16;
 	level.ball_speed = 1000;
 	level.paddle_size = v2(16, 128);
 	level.score_to_beat = 10;
+	level.paddles_give_score = true;
 	return level;
 }
 
 func void init_levels()
 {
+	game->levels.count = 0;
 	{
 		s_level level = make_level();
 		game->levels.add(level);
@@ -724,6 +816,28 @@ func void init_levels()
 		level.paddle_size.y *= 0.5f;
 		game->levels.add(level);
 	}
+	{
+		s_level level = make_level();
+		level.ball_speed *= 0.5f;
+		level.speed_boost = 3000;
+		level.score_to_beat = 2;
+		game->levels.add(level);
+	}
+	{
+		s_level level = make_level();
+		level.ball_speed *= 0.5f;
+		level.speed_boost = 2000;
+		level.score_to_beat = 3;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.spawn_pickups = true;
+		level.paddles_give_score = false;
+		level.score_to_beat = 5;
+		game->levels.add(level);
+	}
 }
 
 func void do_ball_trail(s_ball ball, float radius)
@@ -735,4 +849,9 @@ func void do_ball_trail(s_ball ball, float radius)
 	particle.duration = 0.25f;
 	particle.render_type = 0;
 	game->particles.add_checked(particle);
+}
+
+func char* handle_plural(int num)
+{
+	return (num == 1 || num == -1) ? "" : "s";
 }

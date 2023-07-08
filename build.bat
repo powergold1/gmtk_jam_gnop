@@ -27,7 +27,6 @@ if %debug%==2 (
 
 SETLOCAL ENABLEDELAYEDEXPANSION
 pushd build
-	..\stamp_timer.exe start
 
 	@REM cl /Ycpch_client.h ..\src\pch_client.cpp %comp% -link %linker%
 	@REM cl /Ycpch_platform.h ..\src\pch_platform.cpp %comp% -link %linker%
@@ -52,7 +51,6 @@ pushd build
 		type temp_compiler_output.txt
 	)
 
-	..\stamp_timer.exe end
 popd
 if %errorlevel%==0 goto success
 goto fail

@@ -8,6 +8,7 @@ enum e_state
 {
 	e_state_main_menu,
 	e_state_game,
+	e_state_victory,
 	e_state_count,
 };
 
@@ -117,9 +118,12 @@ struct s_particle
 
 struct s_level
 {
+	b8 spawn_pickups;
+	b8 paddles_give_score;
 	int score_to_beat;
 	s_v2 paddle_size;
 	float ball_radius;
+	float speed_boost;
 	float ball_speed;
 };
 
@@ -128,9 +132,10 @@ struct s_game
 	b8 initialized;
 	b8 reset_game;
 	b8 reset_level;
+	b8 beat_level;
+	b8 go_to_previous_level;
 	int current_level;
 	int score;
-	int max_score;
 	int level_count;
 	int update_count;
 	int frame_count;
@@ -182,6 +187,7 @@ func void sine_alpha_system(int start, int count);
 func s_v4 get_ball_color(s_ball ball);
 func void init_levels();
 func void do_ball_trail(s_ball ball, float radius);
+func char* handle_plural(int num);
 
 #ifdef m_debug
 func void hot_reload_shaders(void);

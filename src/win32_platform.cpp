@@ -141,7 +141,10 @@ LRESULT window_proc(HWND window, UINT msg, WPARAM wparam, LPARAM lparam)
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
-			g_platform_data.any_key_pressed = true;
+			if(msg == WM_KEYDOWN)
+			{
+				g_platform_data.any_key_pressed = true;
+			}
 
 			int key = (int)remap_key_if_necessary(wparam, lparam);
 			b8 is_down = !(b32)((HIWORD(lparam) >> 15) & 1);
