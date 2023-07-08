@@ -1,4 +1,3 @@
-#ifdef _WIN32
 #define m_gl_funcs \
 X(PFNGLBUFFERDATAPROC, glBufferData) \
 X(PFNGLBUFFERSUBDATAPROC, glBufferSubData) \
@@ -35,79 +34,6 @@ X(PFNGLBLENDEQUATIONPROC, glBlendEquation) \
 X(PFNGLDELETEPROGRAMPROC, glDeleteProgram) \
 X(PFNGLDELETESHADERPROC, glDeleteShader) \
 X(PFNGLUNIFORM1FPROC, glUniform1f)
-#else
-#define m_gl_funcs \
-X(PFNGLBUFFERDATAPROC, glBufferDataProc) \
-X(PFNGLBUFFERSUBDATAPROC, glBufferSubDataProc) \
-X(PFNGLGENVERTEXARRAYSPROC, glGenVertexArraysProc) \
-X(PFNGLBINDVERTEXARRAYPROC, glBindVertexArrayProc) \
-X(PFNGLGENBUFFERSPROC, glGenBuffersProc) \
-X(PFNGLBINDBUFFERPROC, glBindBufferProc) \
-X(PFNGLVERTEXATTRIBPOINTERPROC, glVertexAttribPointerProc) \
-X(PFNGLENABLEVERTEXATTRIBARRAYPROC, glEnableVertexAttribArrayProc) \
-X(PFNGLCREATESHADERPROC, glCreateShaderProc) \
-X(PFNGLSHADERSOURCEPROC, glShaderSourceProc) \
-X(PFNGLCREATEPROGRAMPROC, glCreateProgramProc) \
-X(PFNGLATTACHSHADERPROC, glAttachShaderProc) \
-X(PFNGLLINKPROGRAMPROC, glLinkProgramProc) \
-X(PFNGLCOMPILESHADERPROC, glCompileShaderProc) \
-X(PFNGLVERTEXATTRIBDIVISORPROC, glVertexAttribDivisorProc) \
-X(PFNGLDRAWARRAYSINSTANCEDPROC, glDrawArraysInstancedProc) \
-X(PFNGLDEBUGMESSAGECALLBACKPROC, glDebugMessageCallbackProc) \
-X(PFNGLBINDBUFFERBASEPROC, glBindBufferBaseProc) \
-X(PFNGLUNIFORM1FVPROC, glUniform1fvProc) \
-X(PFNGLUNIFORM2FVPROC, glUniform2fvProc) \
-X(PFNGLGETUNIFORMLOCATIONPROC, glGetUniformLocationProc) \
-X(PFNGLUSEPROGRAMPROC, glUseProgramProc) \
-X(PFNGLGETSHADERIVPROC, glGetShaderivProc) \
-X(PFNGLGETSHADERINFOLOGPROC, glGetShaderInfoLogProc) \
-X(PFNGLGENFRAMEBUFFERSPROC, glGenFramebuffersProc) \
-X(PFNGLBINDFRAMEBUFFERPROC, glBindFramebufferProc) \
-X(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2DProc) \
-X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatusProc) \
-X(PFNGLACTIVETEXTUREPROC, glActiveTextureProc) \
-X(PFNGLBLENDEQUATIONPROC, glBlendEquationProc) \
-X(PFNGLDELETEPROGRAMPROC, glDeleteProgramProc) \
-X(PFNGLDELETESHADERPROC, glDeleteShaderProc) \
-X(PFNGLUNIFORM1FPROC, glUniform1fProc) \
-X(PFNGLXSWAPINTERVALEXTPROC, glXSwapIntervalEXTProc)
-
-#define glBufferData glBufferDataProc
-#define glBufferSubData glBufferSubDataProc
-#define glGenVertexArrays glGenVertexArraysProc
-#define glBindVertexArray glBindVertexArrayProc
-#define glGenBuffers glGenBuffersProc
-#define glBindBuffer glBindBufferProc
-#define glVertexAttribPointer glVertexAttribPointerProc
-#define glEnableVertexAttribArray glEnableVertexAttribArrayProc
-#define glCreateShader glCreateShaderProc
-#define glShaderSource glShaderSourceProc
-#define glCreateProgram glCreateProgramProc
-#define glAttachShader glAttachShaderProc
-#define glLinkProgram glLinkProgramProc
-#define glCompileShader glCompileShaderProc
-#define glVertexAttribDivisor glVertexAttribDivisorProc
-#define glDrawArraysInstanced glDrawArraysInstancedProc
-#define glDebugMessageCallback glDebugMessageCallbackProc
-#define glBindBufferBase glBindBufferBaseProc
-#define glUniform1fv glUniform1fvProc
-#define glUniform2fv glUniform2fvProc
-#define glGetUniformLocation glGetUniformLocationProc
-#define glUseProgram glUseProgramProc
-#define glGetShaderiv glGetShaderivProc
-#define glGetShaderInfoLog glGetShaderInfoLogProc
-#define glGenFramebuffers glGenFramebuffersProc
-#define glBindFramebuffer glBindFramebufferProc
-#define glFramebufferTexture2D glFramebufferTexture2DProc
-#define glCheckFramebufferStatus glCheckFramebufferStatusProc
-#define glActiveTexture glActiveTextureProc
-#define glBlendEquation glBlendEquationProc
-#define glDeleteProgram glDeleteProgramProc
-#define glDeleteShader glDeleteShaderProc
-#define glUniform1f glUniform1fProc
-#define glXCreateContextAttribsARB glXCreateContextAttribsARBProc
-#define glXSwapIntervalEXT glXSwapIntervalEXTProc
-#endif
 
 #define X(type, name) extern type name;
 m_gl_funcs
@@ -226,6 +152,7 @@ struct s_platform_data
 {
 	b8 recompiled;
 	b8 quit_after_this_frame;
+	b8 any_key_pressed;
 	int window_width;
 	int window_height;
 	f64 time_passed;

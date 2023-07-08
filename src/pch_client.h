@@ -4,6 +4,7 @@
 
 // @Note(tkap, 24/06/2023): We don't want this Madeg
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <windows.h>
 #include <GL/gl.h>
 #include "external/wglext.h"

@@ -16,6 +16,7 @@ global s_input g_input;
 global s_voice voice_arr[c_max_concurrent_sounds];
 global u64 g_cycle_frequency;
 global u64 g_start_cycles;
+global s_platform_data g_platform_data = zero;
 
 PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT;
 
@@ -45,7 +46,6 @@ int main(int argc, char** argv)
 	t_update_game* update_game = null;
 	HMODULE dll = null;
 	void* game_memory = null;
-	s_platform_data platform_data = zero;
 	s_lin_arena frame_arena = zero;
 
 	{
@@ -57,7 +57,7 @@ int main(int argc, char** argv)
 
 		game_memory = la_get(&all, c_game_memory);
 		frame_arena = make_lin_arena_from_memory(5 * c_mb, la_get(&all, 5 * c_mb));
-		platform_data.frame_arena = &frame_arena;
+		g_platform_data.frame_arena = &frame_arena;
 
 	}
 
@@ -78,11 +78,11 @@ int main(int argc, char** argv)
 			DispatchMessage(&msg);
 		}
 
-		platform_data.input = &g_input;
-		platform_data.quit_after_this_frame = !running;
-		platform_data.window_width = g_window.width;
-		platform_data.window_height = g_window.height;
-		platform_data.time_passed = time_passed;
+		g_platform_data.input = &g_input;
+		g_platform_data.quit_after_this_frame = !running;
+		g_platform_data.window_width = g_window.width;
+		g_platform_data.window_height = g_window.height;
+		g_platform_data.time_passed = time_passed;
 
 		if(need_to_reload_dll("build/client.dll"))
 		{
@@ -97,18 +97,19 @@ int main(int argc, char** argv)
 			update_game = (t_update_game*)GetProcAddress(dll, "update_game");
 			assert(update_game);
 			printf("Reloaded DLL!\n");
-			platform_data.recompiled = true;
+			g_platform_data.recompiled = true;
 		}
 
 
 		POINT p;
 		GetCursorPos(&p);
 		ScreenToClient(g_window.handle, &p);
-		platform_data.mouse.x = (float)p.x;
-		platform_data.mouse.y = (float)p.y;
+		g_platform_data.mouse.x = (float)p.x;
+		g_platform_data.mouse.y = (float)p.y;
 
-		update_game(platform_data, platform_funcs, game_memory);
-		platform_data.recompiled = false;
+		update_game(g_platform_data, platform_funcs, game_memory);
+		g_platform_data.recompiled = false;
+		g_platform_data.any_key_pressed = false;
 
 
 		SwapBuffers(g_window.dc);
@@ -140,6 +141,8 @@ LRESULT window_proc(HWND window, UINT msg, WPARAM wparam, LPARAM lparam)
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
+			g_platform_data.any_key_pressed = true;
+
 			int key = (int)remap_key_if_necessary(wparam, lparam);
 			b8 is_down = !(b32)((HIWORD(lparam) >> 15) & 1);
 			int is_echo = is_down && ((lparam >> 30) & 1);
@@ -150,6 +153,12 @@ LRESULT window_proc(HWND window, UINT msg, WPARAM wparam, LPARAM lparam)
 				si.is_down = is_down;
 				apply_event_to_input(&g_input, si);
 			}
+		} break;
+
+		case WM_LBUTTONDOWN:
+		case WM_RBUTTONDOWN:
+		{
+			g_platform_data.any_key_pressed = true;
 		} break;
 
 		default:

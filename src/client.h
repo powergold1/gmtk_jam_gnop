@@ -16,6 +16,7 @@ enum e_font
 	e_font_small,
 	e_font_medium,
 	e_font_big,
+	e_font_huge,
 	e_font_count,
 };
 
@@ -53,11 +54,7 @@ enum e_shader
 struct s_shader_paths
 {
 	#ifdef m_debug
-	#ifdef _WIN32
 	FILETIME last_write_time;
-	#else
-	time_t last_write_time;
-	#endif // _WIN32
 	#endif // m_debug
 	char* vertex_path;
 	char* fragment_path;
@@ -120,21 +117,25 @@ struct s_particle
 
 struct s_level
 {
-	// how to beat it?
+	int score_to_beat;
 	s_v2 paddle_size;
 	float ball_radius;
+	float ball_speed;
 };
 
 struct s_game
 {
 	b8 initialized;
+	b8 reset_game;
+	b8 reset_level;
 	int current_level;
 	int score;
 	int max_score;
 	int level_count;
 	int update_count;
 	int frame_count;
-	b8 reset_game;
+	s_v2 title_pos;
+	s_v3 title_color;
 	s_ball ball;
 	s_paddle paddle;
 	float total_time;
@@ -152,7 +153,6 @@ struct s_game
 
 	u32 programs[e_shader_count];
 
-	s_sound big_dog_sound;
 	s_sound jump_sound;
 	s_sound jump2_sound;
 	s_sound win_sound;
@@ -180,10 +180,8 @@ func b8 is_key_released(int key);
 void gl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam);
 func void sine_alpha_system(int start, int count);
 func s_v4 get_ball_color(s_ball ball);
-
-
-template <typename T>
-func e_string_input_result handle_string_input(T* str);
+func void init_levels();
+func void do_ball_trail(s_ball ball, float radius);
 
 #ifdef m_debug
 func void hot_reload_shaders(void);

@@ -333,7 +333,7 @@ func b8 circle_collides_circle(s_v2 center1, float radius1, s_v2 center2, float 
 	return false;
 }
 
-s_v3 hsv_to_rgb(s_v3 colour)
+func s_v3 hsv_to_rgb(s_v3 colour)
 {
 	s_v3 rgb;
 
@@ -396,4 +396,16 @@ s_v3 hsv_to_rgb(s_v3 colour)
 	}
 
 	return rgb;
+}
+
+template <typename t>
+func t max(t a, t b)
+{
+	return a >= b ? a : b;
+}
+
+template <typename t>
+func t clamp(t current, t min_val, t max_val)
+{
+	return at_most(max_val, at_least(min_val, current));
 }

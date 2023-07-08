@@ -72,7 +72,6 @@ func char* format_text(const char* text, ...)
 
 func void on_failed_assert(const char* cond, const char* file, int line)
 {
-	#ifdef _WIN32
 	char* text = format_text("FAILED ASSERT IN %s (%i)\n%s\n", file, line, cond);
 	printf("%s\n", text);
 	int result = MessageBox(null, text, "Assertion failed", MB_RETRYCANCEL | MB_TOPMOST);
@@ -87,10 +86,6 @@ func void on_failed_assert(const char* cond, const char* file, int line)
 			exit(1);
 		}
 	}
-	#else
-	fprintf(stderr, "FAILED ASSERT IN %s:%i\n%s\n", file, line, cond);
-	abort();
-	#endif
 }
 
 

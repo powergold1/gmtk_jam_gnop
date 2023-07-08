@@ -92,18 +92,18 @@ m_update_game(update_game)
 		game->rng.seed = (u32)__rdtsc();
 		game->reset_game = true;
 
-		game->state = e_state_game;
+		game->state = e_state_main_menu;
 
 		platform_funcs.set_swap_interval(1);
 
 		game->jump_sound = load_wav("assets/jump.wav", frame_arena);
 		game->jump2_sound = load_wav("assets/jump2.wav", frame_arena);
-		game->big_dog_sound = load_wav("assets/big_dog.wav", frame_arena);
 		game->win_sound = load_wav("assets/win.wav", frame_arena);
 
 		game->font_arr[e_font_small] = load_font("assets/consola.ttf", 24, frame_arena);
 		game->font_arr[e_font_medium] = load_font("assets/consola.ttf", 36, frame_arena);
 		game->font_arr[e_font_big] = load_font("assets/consola.ttf", 72, frame_arena);
+		game->font_arr[e_font_huge] = load_font("assets/consola.ttf", 256, frame_arena);
 
 		for(int shader_i = 0; shader_i < e_shader_count; shader_i++)
 		{
@@ -117,10 +117,13 @@ m_update_game(update_game)
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, game->default_ssbo);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, game->default_ssbo);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(transforms.elements), null, GL_DYNAMIC_DRAW);
+
+		init_levels();
 	}
 
 	if(platform_data.recompiled)
 	{
+		init_levels();
 		#define X(type, name) name = (type)platform_funcs.load_gl_func(#name);
 		m_gl_funcs
 		#undef X
@@ -161,13 +164,30 @@ func void update()
 	g_platform_funcs.show_cursor(false);
 	switch(game->state)
 	{
+		case e_state_main_menu:
+		{
+			game->title_pos = v2(
+				c_half_res.x,
+				range_lerp(sinf(game->total_time * 2), -1, 1, c_base_res.y * 0.2f, c_base_res.y * 0.4f)
+			);
+			game->ball.x = c_half_res.x;
+			game->ball.y = clamp(g_platform_data.mouse.y, 0.0f, c_base_res.y);
+			game->title_color = v3(sinf2(game->total_time), 1, 1);
+			do_ball_trail(game->ball, 16);
+
+			if(g_platform_data.any_key_pressed)
+			{
+				game->state = e_state_game;
+			}
+		} break;
+
 		case e_state_game:
 		{
 
 			s_ball* ball = &game->ball;
 			s_paddle* paddle = &game->paddle;
 			s_rng* rng = &game->rng;
-			s_level current_level = game->levels[game->current_level];
+			s_level level = game->levels[game->current_level];
 
 			if(is_key_pressed(c_key_f))
 			{
@@ -178,45 +198,45 @@ func void update()
 			if(game->reset_game)
 			{
 				game->reset_game = false;
+				game->reset_level = true;
+			}
+			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		reset game end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+			if(game->reset_level)
+			{
+				game->reset_level = false;
+				game->score = 0;
+
 				game->pickups.count = 0;
 				game->score = 0;
-				ball->speed = 800;
+				ball->speed = level.ball_speed;
 				ball->x = c_half_res.x;
 				if(rng->rand_bool())
 				{
-					paddle->x = c_base_res.x - c_paddle_size.x / 2;
+					paddle->x = c_base_res.x - level.paddle_size.x / 2;
 					ball->dir.x = 1;
 				}
 				else
 				{
-					paddle->x = c_paddle_size.x / 2;
+					paddle->x = level.paddle_size.x / 2;
 					ball->dir.x = -1;
 				}
 				paddle->y = c_half_res.y;
 			}
-			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		reset game end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update ball start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 			// if(game->update_count % 10 == 0)
-			{
-				s_particle particle = zero;
-				particle.pos = ball->pos;
-				particle.radius = c_ball_radius;
-				particle.color = get_ball_color(*ball);
-				particle.duration = 0.25f;
-				particle.render_type = 0;
-				game->particles.add_checked(particle);
-			}
+			do_ball_trail(*ball, level.ball_radius);
 
 			ball->x += ball->dir.x * delta * ball->speed;
 			ball->hit_time = at_least(0.0f, ball->hit_time - delta);
 			s_v2 ball_pos_before_collision = ball->pos;
-			if(rect_collides_circle(paddle->pos, c_paddle_size, ball->pos, c_ball_radius))
+			if(rect_collides_circle(paddle->pos, level.paddle_size, ball->pos, level.ball_radius))
 			{
-				ball->x = paddle->x - (c_paddle_size.x / 2.0f * ball->dir.x) - (c_ball_radius * ball->dir.x);
+				ball->x = paddle->x - (level.paddle_size.x / 2.0f * ball->dir.x) - (level.ball_radius * ball->dir.x);
 				paddle->x += c_base_res.x * -ball->dir.x;
-				paddle->x += c_paddle_size.x * ball->dir.x;
-				paddle->y = rng->randf_range(c_paddle_size.y / 2, c_base_res.y - c_paddle_size.y / 2);
+				paddle->x += level.paddle_size.x * ball->dir.x;
+				paddle->y = rng->randf_range(level.paddle_size.y / 2, c_base_res.y - level.paddle_size.y / 2);
 				ball->dir.x = -ball->dir.x;
 				ball->speed += 100;
 				g_platform_funcs.play_sound(game->jump_sound);
@@ -232,7 +252,7 @@ func void update()
 					p.duration = 0.5f * rng->randf32();
 					p.render_type = 1;
 					p.color = v4(0.5f, 0.25f, 0.05f, 1);
-					p.radius = c_ball_radius * rng->randf32();
+					p.radius = level.ball_radius * rng->randf32();
 					p.dir.x = (float)rng->randf2();
 					p.dir.y = (float)rng->randf2();
 					p.dir = v2_normalized(p.dir);
@@ -254,7 +274,7 @@ func void update()
 
 			foreach_raw(pickup_i, pickup, game->pickups)
 			{
-				if(circle_collides_circle(ball->pos, c_ball_radius, pickup.pos, c_ball_radius))
+				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
 				{
 					ball->speed -= 100;
 					game->pickups.remove_and_swap(pickup_i--);
@@ -267,7 +287,7 @@ func void update()
 						p.duration = 0.5f * rng->randf32();
 						p.render_type = 1;
 						p.color = v4(0.1f, 0.7f, 0.1f, 1);
-						p.radius = c_ball_radius * 2 * rng->randf32();
+						p.radius = level.ball_radius * 2 * rng->randf32();
 						p.dir.x = (float)rng->randf2();
 						p.dir.y = (float)rng->randf2();
 						p.dir = v2_normalized(p.dir);
@@ -278,22 +298,38 @@ func void update()
 				}
 			}
 
-			ball->y = g_platform_data.mouse.y;
+			ball->y = clamp(g_platform_data.mouse.y, 0.0f, c_base_res.y);
 			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update ball end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update particles start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-			foreach(particle_i, particle, game->particles)
+			if(ball->x > c_base_res.x + level.ball_radius || ball->x < level.ball_radius)
 			{
-				particle->time += delta;
-				particle->pos += particle->dir * particle->speed * delta;
-				if(particle->time >= particle->duration)
-				{
-					game->particles.remove_and_swap(particle_i--);
-				}
+				game->reset_level = true;
 			}
-			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update particles end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+			if(game->score >= level.score_to_beat)
+			{
+				game->current_level += 1;
+				game->score = 0;
+				ball->speed = game->levels[game->current_level].ball_speed;
+				g_platform_funcs.play_sound(game->win_sound);
+				game->reset_level = true;
+			}
+
 		} break;
 	}
+
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update particles start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	foreach(particle_i, particle, game->particles)
+	{
+		particle->time += delta;
+		particle->pos += particle->dir * particle->speed * delta;
+		if(particle->time >= particle->duration)
+		{
+			game->particles.remove_and_swap(particle_i--);
+		}
+	}
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update particles end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 }
 
 func void render(float dt)
@@ -301,36 +337,45 @@ func void render(float dt)
 
 	switch(game->state)
 	{
+		case e_state_main_menu:
+		{
+			draw_text("GNOP", game->title_pos, 15, v4(hsv_to_rgb(game->title_color), 1), e_font_huge, true);
+			draw_circle(game->ball.pos, 5, 16, v4(1));
+			draw_text("Control the Ball with the Mouse", v2(c_half_res.x, c_base_res.y * 0.7f), 15, v4(1), e_font_big, true);
+			draw_text("Press Any Key to Start", v2(c_half_res.x, c_base_res.y * 0.8f), 15, v4(1), e_font_big, true);
+			draw_text("Made Live at twitch.tv/Tkap1", v2(c_half_res.x, c_base_res.y * 0.9f), 15, make_color(0.5f), e_font_medium, true);
+		} break;
+
 		case e_state_game:
 		{
-			draw_circle(game->ball.pos, 5, c_ball_radius, get_ball_color(game->ball));
-			draw_rect(game->paddle.pos, 10, c_paddle_size, v4(1));
+			s_level level = game->levels[game->current_level];
+			draw_circle(game->ball.pos, 5, level.ball_radius, get_ball_color(game->ball));
+			draw_rect(game->paddle.pos, 10, level.paddle_size, v4(1));
 
 			draw_text(format_text("%i", game->score), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 
 			foreach_raw(pickup_i, pickup, game->pickups)
 			{
-				draw_circle(pickup.pos, 4, c_ball_radius, v4(0, 1, 0, 1));
-				draw_circle(pickup.pos, 4, c_ball_radius * 2, v4(0, 1, 0, 0.25f));
+				draw_circle(pickup.pos, 4, level.ball_radius, v4(0, 1, 0, 1));
+				draw_circle(pickup.pos, 4, level.ball_radius * 2, v4(0, 1, 0, 0.25f));
 			}
-
-			foreach_raw(particle_i, particle, game->particles)
-			{
-				s_v4 color = particle.color;
-				float percent = (particle.time / particle.duration);
-				float percent_left = 1.0f - percent;
-				color.w = powf(percent_left, 0.5f);
-				if(particle.render_type == 0)
-				{
-					draw_circle(particle.pos, 1, particle.radius * range_lerp(percent, 0, 1, 1, 0.2f), color);
-				}
-				else
-				{
-					draw_circle_p(particle.pos, 1, particle.radius * range_lerp(percent, 0, 1, 1, 0.2f), color);
-				}
-			}
-
 		} break;
+	}
+
+	foreach_raw(particle_i, particle, game->particles)
+	{
+		s_v4 color = particle.color;
+		float percent = (particle.time / particle.duration);
+		float percent_left = 1.0f - percent;
+		color.w = powf(percent_left, 0.5f);
+		if(particle.render_type == 0)
+		{
+			draw_circle(particle.pos, 1, particle.radius * range_lerp(percent, 0, 1, 1, 0.2f), color);
+		}
+		else
+		{
+			draw_circle_p(particle.pos, 1, particle.radius * range_lerp(percent, 0, 1, 1, 0.2f), color);
+		}
 	}
 
 	{
@@ -466,9 +511,9 @@ func s_font load_font(const char* path, float font_size, s_lin_arena* arena)
 			{
 				u8 src_pixel = bitmap[x + y * glyph->width];
 				u8* dst_pixel = &gl_bitmap[((current_x + x) + (padding + y) * total_width) * 4];
-				dst_pixel[0] = src_pixel;
-				dst_pixel[1] = src_pixel;
-				dst_pixel[2] = src_pixel;
+				dst_pixel[0] = 255;
+				dst_pixel[1] = 255;
+				dst_pixel[2] = 255;
 				dst_pixel[3] = src_pixel;
 			}
 		}
@@ -546,7 +591,6 @@ func s_v2 get_text_size(const char* text, e_font font_id)
 
 
 #ifdef m_debug
-#ifdef _WIN32
 func void hot_reload_shaders(void)
 {
 	for(int shader_i = 0; shader_i < e_shader_count; shader_i++)
@@ -577,32 +621,6 @@ func void hot_reload_shaders(void)
 	}
 
 }
-#else
-func void hot_reload_shaders(void)
-{
-	for(int shader_i = 0; shader_i < e_shader_count; shader_i++)
-	{
-		s_shader_paths* sp = &shader_paths[shader_i];
-		struct stat s;
-		int rc = stat(sp->fragment_path, &s);
-		if(rc < 0) { continue; }
-		if(s.st_mtime > sp->last_write_time)
-		{
-			u32 new_program = load_shader(sp->vertex_path, sp->fragment_path);
-			if(new_program)
-			{
-				if(game->programs[shader_i])
-				{
-					glUseProgram(0);
-					glDeleteProgram(game->programs[shader_i]);
-				}
-				game->programs[shader_i] = load_shader(sp->vertex_path, sp->fragment_path);
-				sp->last_write_time = s.st_mtime;
-			}
-		}
-	}
-}
-#endif // _WIN32
 #endif // m_debug
 
 func u32 load_shader(const char* vertex_path, const char* fragment_path)
@@ -678,4 +696,43 @@ func s_v4 get_ball_color(s_ball ball)
 	s_v4 b = make_color(1);
 	float p = 1.0f - ilerp(0.0f, c_ball_hit_time, ball.hit_time);
 	return lerp(a, b, p);
+}
+
+func s_level make_level()
+{
+	s_level level = zero;
+	level.ball_radius = 16;
+	level.ball_speed = 1000;
+	level.paddle_size = v2(16, 128);
+	level.score_to_beat = 10;
+	return level;
+}
+
+func void init_levels()
+{
+	{
+		s_level level = make_level();
+		game->levels.add(level);
+	}
+	{
+		s_level level = make_level();
+		level.paddle_size.y *= 0.75f;
+		game->levels.add(level);
+	}
+	{
+		s_level level = make_level();
+		level.paddle_size.y *= 0.5f;
+		game->levels.add(level);
+	}
+}
+
+func void do_ball_trail(s_ball ball, float radius)
+{
+	s_particle particle = zero;
+	particle.pos = ball.pos;
+	particle.radius = radius;
+	particle.color = get_ball_color(ball);
+	particle.duration = 0.25f;
+	particle.render_type = 0;
+	game->particles.add_checked(particle);
 }
