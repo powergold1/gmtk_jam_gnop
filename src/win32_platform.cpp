@@ -9,7 +9,10 @@
 #include "config.h"
 #include "platform_shared.h"
 #include "win32_platform.h"
+
+#ifdef m_debug
 #include "win32_reload_dll.h"
+#endif // m_debug
 
 global s_window g_window;
 global s_input g_input;
@@ -18,7 +21,7 @@ global u64 g_cycle_frequency;
 global u64 g_start_cycles;
 global s_platform_data g_platform_data = zero;
 
-PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT;
+static PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT;
 
 #include "memory.cpp"
 #include "platform_shared.cpp"
@@ -43,8 +46,10 @@ int main(int argc, char** argv)
 	platform_funcs.set_swap_interval = set_swap_interval;
 	platform_funcs.show_cursor = ShowCursor;
 
+	#ifdef m_debug
 	t_update_game* update_game = null;
 	HMODULE dll = null;
+	#endif // m_debug
 	void* game_memory = null;
 	s_lin_arena frame_arena = zero;
 
@@ -84,6 +89,7 @@ int main(int argc, char** argv)
 		g_platform_data.window_height = g_window.height;
 		g_platform_data.time_passed = time_passed;
 
+		#ifdef m_debug
 		if(need_to_reload_dll("build/client.dll"))
 		{
 			if(dll) { unload_dll(dll); }
@@ -99,6 +105,7 @@ int main(int argc, char** argv)
 			printf("Reloaded DLL!\n");
 			g_platform_data.recompiled = true;
 		}
+		#endif // m_debug
 
 
 		POINT p;

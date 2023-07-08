@@ -28,17 +28,11 @@ X(PFNGLBINDFRAMEBUFFERPROC, glBindFramebuffer) \
 X(PFNGLFRAMEBUFFERTEXTURE2DPROC, glFramebufferTexture2D) \
 X(PFNGLCHECKFRAMEBUFFERSTATUSPROC, glCheckFramebufferStatus) \
 X(PFNGLACTIVETEXTUREPROC, glActiveTexture) \
-X(PFNWGLSWAPINTERVALEXTPROC, wglSwapIntervalEXT) \
-X(PFNWGLGETSWAPINTERVALEXTPROC, wglGetSwapIntervalEXT) \
 X(PFNGLBLENDEQUATIONPROC, glBlendEquation) \
 X(PFNGLDELETEPROGRAMPROC, glDeleteProgram) \
 X(PFNGLDELETESHADERPROC, glDeleteShader) \
 X(PFNGLUNIFORM1IPROC, glUniform1i) \
 X(PFNGLUNIFORM1FPROC, glUniform1f)
-
-#define X(type, name) extern type name;
-m_gl_funcs
-#undef X
 
 global constexpr int c_key_backspace = 0x08;
 global constexpr int c_key_tab = 0x09;
@@ -173,4 +167,8 @@ struct s_platform_funcs
 
 
 #define m_update_game(name) void name(s_platform_data platform_data, s_platform_funcs platform_funcs, void* game_memory)
+#ifdef m_debug
 typedef m_update_game(t_update_game);
+#else // m_debug
+m_update_game(update_game);
+#endif

@@ -56,7 +56,7 @@ global s_shader_paths shader_paths[e_shader_count] = {
 };
 
 
-#define X(type, name) type name = null;
+#define X(type, name) static type name = null;
 m_gl_funcs
 #undef X
 
@@ -66,9 +66,10 @@ m_gl_funcs
 #include "str_builder.cpp"
 #include "audio.cpp"
 
-extern "C"
-{
+#ifdef m_debug
+extern "C" {
 __declspec(dllexport)
+#endif // m_debug
 m_update_game(update_game)
 {
 	static_assert(c_game_memory >= sizeof(s_game));
@@ -160,7 +161,10 @@ m_update_game(update_game)
 
 	frame_arena->used = 0;
 }
+
+#ifdef m_debug
 }
+#endif // m_debug
 
 global bool paused = false;
 func void update()
