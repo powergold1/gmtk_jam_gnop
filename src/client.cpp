@@ -99,6 +99,7 @@ m_update_game(update_game)
 		game->jump_sound = load_wav("assets/jump.wav", frame_arena);
 		game->jump2_sound = load_wav("assets/jump2.wav", frame_arena);
 		game->win_sound = load_wav("assets/win.wav", frame_arena);
+		game->fail_sound = load_wav("assets/fail.wav", frame_arena);
 
 		game->font_arr[e_font_small] = load_font("assets/consola.ttf", 24, frame_arena);
 		game->font_arr[e_font_medium] = load_font("assets/consola.ttf", 36, frame_arena);
@@ -237,6 +238,34 @@ func void update()
 				paddle->y = c_half_res.y;
 
 				paddle->dir = rng->rand_bool() ? 1.0f : -1.0f;
+
+				if(level.obstacles)
+				{
+					for(int i = 0; i < 20; i++)
+					{
+						s_v2 topleft;
+						s_v2 bottomright;
+						if(rng->rand_bool())
+						{
+							topleft = v2(0, 0);
+							bottomright = v2(c_base_res.x * 0.35f, c_base_res.y);
+						}
+						else
+						{
+							topleft = v2(c_base_res.x * 0.65f, 0);
+							bottomright = v2(c_base_res.x, c_base_res.y);
+						}
+						float x = rng->randf_range(topleft.x, bottomright.x);
+						float y = rng->randf_range(topleft.y, bottomright.y);
+
+						s_pickup pickup = zero;
+						pickup.x = x;
+						pickup.y = y;
+						pickup.type = e_pickup_death;
+						pickup.radius = level.obstacle_radius;
+						game->pickups.add_checked(pickup);
+					}
+				}
 			}
 
 			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update ball start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -278,6 +307,7 @@ func void update()
 				}
 				ball->hit_time = c_ball_hit_time;
 
+				float l = at_least(1.0f, powf(ball->speed - 800, 0.1f));
 				for(int i = 0; i < 100; i++)
 				{
 					s_particle p = zero;
@@ -286,11 +316,11 @@ func void update()
 					p.duration = 0.5f * rng->randf32();
 					p.render_type = 1;
 					p.color = v4(0.5f, 0.25f, 0.05f, 1);
-					p.radius = level.ball_radius * rng->randf32();
+					p.radius = level.ball_radius * rng->randf32() * l;
 					p.dir.x = (float)rng->randf2();
 					p.dir.y = (float)rng->randf2();
 					p.dir = v2_normalized(p.dir);
-					p.speed = 100 * rng->randf32();
+					p.speed = 100 * rng->randf32() * l;
 					game->particles.add_checked(p);
 				}
 
@@ -299,10 +329,12 @@ func void update()
 					// if(rng->chance100(25))
 					{
 						s_pickup pickup = zero;
+						pickup.type = e_pickup_score;
 						float radius = c_half_res.x * (c_base_res.y / c_base_res.x);
 						float angle = rng->randf32() * tau;
 						pickup.x = cosf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.x;
 						pickup.y = sinf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.y;
+						pickup.radius = level.ball_radius;
 						game->pickups.add_checked(pickup);
 					}
 				}
@@ -331,8 +363,18 @@ func void update()
 				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
 				{
 					// ball->speed -= 100;
-					game->score += 1;
+					if(pickup.type == e_pickup_score)
+					{
+						game->score += 1;
+					}
+					else if(pickup.type == e_pickup_death)
+					{
+						game->reset_level = true;
+						g_platform_funcs.play_sound(game->fail_sound);
+					}
 					game->pickups.remove_and_swap(pickup_i--);
+
+					s_v4 color = g_pickup_data[pickup.type].color;
 
 					for(int i = 0; i < 100; i++)
 					{
@@ -341,7 +383,7 @@ func void update()
 						p.pos = ball_pos_before_collision;
 						p.duration = 0.5f * rng->randf32();
 						p.render_type = 1;
-						p.color = v4(0.1f, 0.7f, 0.1f, 1);
+						p.color = color;
 						p.radius = level.ball_radius * 2 * rng->randf32();
 						p.dir.x = (float)rng->randf2();
 						p.dir.y = (float)rng->randf2();
@@ -359,6 +401,7 @@ func void update()
 			if(ball->x > c_base_res.x + level.ball_radius || ball->x < level.ball_radius)
 			{
 				game->reset_level = true;
+				g_platform_funcs.play_sound(game->fail_sound);
 			}
 
 			if(game->score >= level.score_to_beat)
@@ -457,8 +500,12 @@ func void render(float dt)
 
 			foreach_raw(pickup_i, pickup, game->pickups)
 			{
-				draw_circle(pickup.pos, 4, level.ball_radius, v4(0, 1, 0, 1));
-				draw_circle(pickup.pos, 4, level.ball_radius * 2, v4(0, 1, 0, 0.25f));
+				s_v4 color = g_pickup_data[pickup.type].color;
+
+				draw_circle(pickup.pos, 4, pickup.radius, color);
+				s_v4 light_color = color;
+				light_color.w = 0.25f;
+				draw_circle(pickup.pos, 4, pickup.radius * 2, light_color);
 			}
 
 			draw_text(format_text("Level: %i", game->current_level + 1), v2(0,0), 4, make_color(1), e_font_medium, false);
@@ -822,6 +869,7 @@ func s_level make_level()
 	level.score_to_beat = 10;
 	level.paddles_give_score = true;
 	level.paddle_speed = 250;
+	level.obstacle_radius = 16;
 	return level;
 }
 
@@ -951,6 +999,34 @@ func void init_levels()
 		level.paddle_size.y *= 1.0f;
 		level.ball_speed *= 3;
 		level.speed_boost *= 4;
+		game->levels.add(level);
+	}
+
+	// @Note(tkap, 08/07/2023): Obstacles
+	{
+		s_level level = make_level();
+		level.obstacles = true;
+		level.score_to_beat = 5;
+		level.ball_speed *= 0.5f;
+		level.obstacle_radius = 8;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.obstacles = true;
+		level.score_to_beat = 5;
+		level.ball_speed *= 0.5f;
+		level.obstacle_radius = 12;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.obstacles = true;
+		level.score_to_beat = 5;
+		level.ball_speed *= 0.5f;
+		level.obstacle_radius = 16;
 		game->levels.add(level);
 	}
 }

@@ -91,8 +91,22 @@ struct s_paddle
 	float dir;
 };
 
+enum e_pickup
+{
+	e_pickup_score,
+	e_pickup_death,
+	e_pickup_count,
+};
+
+struct s_pickup_data
+{
+	s_v4 color;
+};
+
 struct s_pickup
 {
+	e_pickup type;
+	float radius;
 	union
 	{
 		struct
@@ -102,6 +116,11 @@ struct s_pickup
 		};
 		s_v2 pos;
 	};
+};
+
+global constexpr s_pickup_data g_pickup_data[e_pickup_count] = {
+	{.color = make_color(0, 1, 0)},
+	{.color = make_color(1, 0, 0)},
 };
 
 struct s_particle
@@ -123,12 +142,14 @@ struct s_level
 	b8 paddles_give_score;
 	b8 moving_paddles;
 	b8 synced_paddles;
+	b8 obstacles;
 	int score_to_beat;
-	s_v2 paddle_size;
 	float paddle_speed;
 	float ball_radius;
 	float speed_boost;
 	float ball_speed;
+	float obstacle_radius;
+	s_v2 paddle_size;
 };
 
 struct s_game
@@ -165,6 +186,7 @@ struct s_game
 	s_sound jump_sound;
 	s_sound jump2_sound;
 	s_sound win_sound;
+	s_sound fail_sound;
 };
 
 func void update();

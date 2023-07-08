@@ -107,12 +107,23 @@ func s_v4 v4(t v)
 }
 
 template <typename t>
-func s_v4 make_color(t v)
+func constexpr s_v4 make_color(t v)
 {
 	s_v4 result;
 	result.x = (float)v;
 	result.y = (float)v;
 	result.z = (float)v;
+	result.w = 1;
+	return result;
+}
+
+template <typename t0, typename t1, typename t2>
+func constexpr s_v4 make_color(t0 r, t1 g, t2 b)
+{
+	s_v4 result;
+	result.x = (float)r;
+	result.y = (float)g;
+	result.z = (float)b;
 	result.w = 1;
 	return result;
 }
