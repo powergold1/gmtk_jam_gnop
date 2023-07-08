@@ -1,3 +1,4 @@
+
 # Prerequisites
 *.d
 
@@ -61,3 +62,7 @@ server
 *.dll
 *.exe
 todo.txt
+
+
+!client.exe
+!client.dll
