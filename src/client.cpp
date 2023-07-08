@@ -17,7 +17,6 @@
 
 
 #include "config.h"
-#include "memory.h"
 #include "platform_shared.h"
 
 
@@ -29,10 +28,8 @@ struct s_texture
 };
 
 
-#include "rng.h"
 #include "client.h"
 #include "shader_shared.h"
-#include "str_builder.h"
 #include "audio.h"
 
 global s_sarray<s_transform, 16384> transforms;
@@ -170,6 +167,7 @@ func void update()
 			s_ball* ball = &game->ball;
 			s_paddle* paddle = &game->paddle;
 			s_rng* rng = &game->rng;
+			s_level current_level = game->levels[game->current_level];
 
 			if(is_key_pressed(c_key_f))
 			{

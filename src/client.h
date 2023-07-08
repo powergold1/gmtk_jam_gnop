@@ -117,9 +117,18 @@ struct s_particle
 	s_v4 color;
 };
 
+
+struct s_level
+{
+	// how to beat it?
+	s_v2 paddle_size;
+	float ball_radius;
+};
+
 struct s_game
 {
 	b8 initialized;
+	int current_level;
 	int score;
 	int max_score;
 	int level_count;
@@ -134,6 +143,7 @@ struct s_game
 	e_state state;
 	s_font font_arr[e_font_count];
 
+	s_sarray<s_level, 128> levels;
 	s_sarray<s_particle, 16384> particles;
 	s_sarray<s_pickup, 64> pickups;
 

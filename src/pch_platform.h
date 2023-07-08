@@ -15,5 +15,5 @@
 #include <stdint.h>
 
 #include "types.h"
-#include "epic_math.h"
+#include "math.h"
 #include "utils.h"

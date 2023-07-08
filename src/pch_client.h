@@ -15,5 +15,8 @@
 #include <intrin.h>
 
 #include "types.h"
-#include "epic_math.h"
+#include "math.h"
 #include "utils.h"
+#include "memory.h"
+#include "str_builder.h"
+#include "rng.h"

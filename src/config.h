@@ -21,8 +21,6 @@ global constexpr int c_max_concurrent_sounds = 8;
 #define delta (1.0f / c_updates_per_second)
 #define c_invalid_entity (-1)
 
-#define c_str_builder_size 1024
-
 global constexpr float c_ball_radius = 16;
 global constexpr float c_ball_hit_time = 0.5f;
 global constexpr s_v2 c_paddle_size = {16, 128};
