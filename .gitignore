@@ -47,7 +47,8 @@ Module.symvers
 Mkfile.old
 dkms.conf
 stamp_timer.data
-build/*.lib
+build/**
+build
 .tags
 config.txt
 *.rdbg

@@ -28,9 +28,10 @@ if %debug%==2 (
 SETLOCAL ENABLEDELAYEDEXPANSION
 pushd build
 
-	@REM cl /Ycpch_client.h ..\src\pch_client.cpp %comp% -link %linker%
-	@REM cl /Ycpch_platform.h ..\src\pch_platform.cpp %comp% -link %linker%
-	@REM goto foo
+	if "%1%"=="pch" (
+		cl /Ycpch_client.h ..\src\pch_client.cpp %comp% /c
+		cl /Ycpch_platform.h ..\src\pch_platform.cpp %comp% /c
+	)
 
 	cl ..\src\client.cpp /Yupch_client.h -LD -Feclient.dll %comp% -link %linker% pch_client.obj -PDB:client.pdb > temp_compiler_output.txt
 	if NOT !ErrorLevel! == 0 (

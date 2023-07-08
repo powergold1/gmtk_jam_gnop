@@ -324,8 +324,8 @@ func void update()
 						p.dir = v2_normalized(p.dir);
 						p.speed = 400 * rng->randf32();
 						game->particles.add(p);
-						g_platform_funcs.play_sound(game->jump2_sound);
 					}
+					g_platform_funcs.play_sound(game->jump2_sound);
 				}
 			}
 
