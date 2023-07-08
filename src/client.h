@@ -61,9 +61,9 @@ struct s_shader_paths
 	char* fragment_path;
 };
 
-struct s_ball
+struct s_entity
 {
-	float speed;
+	int id;
 	union
 	{
 		struct
@@ -73,54 +73,35 @@ struct s_ball
 		};
 		s_v2 pos;
 	};
+};
+
+struct s_ball : s_entity
+{
+	float speed;
 	s_v2 dir;
 	float hit_time;
 };
 
-struct s_paddle
+struct s_paddle : s_entity
 {
-	union
-	{
-		struct
-		{
-			float x;
-			float y;
-		};
-		s_v2 pos;
-	};
 	float dir;
 };
 
-enum e_pickup
+struct s_portal
 {
-	e_pickup_score,
-	e_pickup_death,
-	e_pickup_count,
-};
-
-struct s_pickup_data
-{
-	s_v4 color;
-};
-
-struct s_pickup
-{
-	e_pickup type;
 	float radius;
-	union
-	{
-		struct
-		{
-			float x;
-			float y;
-		};
-		s_v2 pos;
-	};
+	s_v2 active;
+	s_v2 target;
 };
 
-global constexpr s_pickup_data g_pickup_data[e_pickup_count] = {
-	{.color = make_color(0, 1, 0)},
-	{.color = make_color(1, 0, 0)},
+struct s_score_pickup : s_entity
+{
+	float radius;
+};
+
+struct s_death_pickup : s_entity
+{
+	float radius;
 };
 
 struct s_particle
@@ -143,12 +124,14 @@ struct s_level
 	b8 moving_paddles;
 	b8 synced_paddles;
 	b8 obstacles;
+	b8 portals;
 	int score_to_beat;
 	float paddle_speed;
 	float ball_radius;
 	float speed_boost;
 	float ball_speed;
 	float obstacle_radius;
+	float portal_radius;
 	s_v2 paddle_size;
 };
 
@@ -160,6 +143,7 @@ struct s_game
 	b8 beat_level;
 	b8 go_to_previous_level;
 	b8 spawn_obstacles;
+	b8 spawn_portals;
 	int current_level;
 	int score;
 	int level_count;
@@ -177,7 +161,9 @@ struct s_game
 
 	s_sarray<s_level, 128> levels;
 	s_sarray<s_particle, 16384> particles;
-	s_sarray<s_pickup, 64> pickups;
+	s_sarray<s_score_pickup, 64> score_pickups;
+	s_sarray<s_death_pickup, 64> death_pickups;
+	s_sarray<s_portal, 64> portals;
 
 	u32 default_vao;
 	u32 default_ssbo;

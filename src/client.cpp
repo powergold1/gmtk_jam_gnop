@@ -223,7 +223,9 @@ func void update()
 				game->reset_level = false;
 				game->score = 0;
 
-				game->pickups.count = 0;
+				game->score_pickups.count = 0;
+				game->death_pickups.count = 0;
+				game->portals.count = 0;
 				game->score = 0;
 				ball->speed = level.ball_speed;
 				ball->hit_time = 0;
@@ -246,7 +248,7 @@ func void update()
 
 			if(game->spawn_obstacles)
 			{
-				game->pickups.count = 0;
+				game->death_pickups.count = 0;
 				game->spawn_obstacles = false;
 				for(int i = 0; i < 15; i++)
 				{
@@ -265,12 +267,38 @@ func void update()
 					float x = rng->randf_range(topleft.x, bottomright.x);
 					float y = rng->randf_range(topleft.y, bottomright.y);
 
-					s_pickup pickup = zero;
+					s_death_pickup pickup = zero;
 					pickup.x = x;
 					pickup.y = y;
-					pickup.type = e_pickup_death;
 					pickup.radius = level.obstacle_radius;
-					game->pickups.add_checked(pickup);
+					game->death_pickups.add_checked(pickup);
+				}
+			}
+
+			if(game->spawn_portals)
+			{
+				game->spawn_portals = false;
+				game->portals.count = 0;
+				game->death_pickups.count = 0;
+				s_portal portal = zero;
+				float temp = ball->dir.x > 0 ? 0.2f : 0.8f;
+				portal.active.x = c_base_res.x * temp;
+				portal.active.y = c_base_res.y * rng->randf32();
+				portal.target.x = c_base_res.x * (1.0f - temp);
+				portal.target.y = c_base_res.y * rng->randf32();
+				portal.radius = level.portal_radius;
+				game->portals.add(portal);
+
+				for(int i = 0; i < 30; i++)
+				{
+					float p = i / 29.0f;
+					s_death_pickup pickup = zero;
+					pickup.pos = v2(
+						c_half_res.x,
+						c_base_res.y * p
+					);
+					pickup.radius = level.obstacle_radius;
+					game->death_pickups.add(pickup);
 				}
 			}
 
@@ -291,12 +319,13 @@ func void update()
 				paddle->x += c_base_res.x * -ball->dir.x;
 				paddle->x += level.paddle_size.x * ball->dir.x;
 				if(level.obstacles) { game->spawn_obstacles = true; }
+				if(level.portals) { game->spawn_portals = true; }
 
 				if(!level.synced_paddles)
 				{
 					paddle->dir = rng->rand_bool() ? 1.0f : -1.0f;
 
-					// @Note(tkap, 08/07/2023): Place paddle at random position that doesn't overlap with previous position
+					// @Note(tkap, 08/07/2023): Try to place paddle at random position that doesn't overlap with previous position
 					{
 						float prev_paddle_y = paddle->y;
 						int attempts = 0;
@@ -335,19 +364,15 @@ func void update()
 					game->particles.add_checked(p);
 				}
 
-				if(level.spawn_pickups && game->pickups.count == 0)
+				if(level.spawn_pickups && game->score_pickups.count == 0)
 				{
-					// if(rng->chance100(25))
-					{
-						s_pickup pickup = zero;
-						pickup.type = e_pickup_score;
-						float radius = c_half_res.x * (c_base_res.y / c_base_res.x);
-						float angle = rng->randf32() * tau;
-						pickup.x = cosf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.x;
-						pickup.y = sinf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.y;
-						pickup.radius = level.ball_radius;
-						game->pickups.add_checked(pickup);
-					}
+					s_score_pickup pickup = zero;
+					float radius = c_half_res.x * (c_base_res.y / c_base_res.x);
+					float angle = rng->randf32() * tau;
+					pickup.x = cosf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.x;
+					pickup.y = sinf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.y;
+					pickup.radius = level.ball_radius;
+					game->score_pickups.add_checked(pickup);
 				}
 
 			}
@@ -369,23 +394,14 @@ func void update()
 			}
 			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update paddles end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-			foreach_raw(pickup_i, pickup, game->pickups)
+			foreach_raw(pickup_i, pickup, game->score_pickups)
 			{
 				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
 				{
-					// ball->speed -= 100;
-					if(pickup.type == e_pickup_score)
-					{
-						game->score += 1;
-					}
-					else if(pickup.type == e_pickup_death)
-					{
-						game->reset_level = true;
-						g_platform_funcs.play_sound(game->fail_sound);
-					}
-					game->pickups.remove_and_swap(pickup_i--);
+					game->score += 1;
+					game->score_pickups.remove_and_swap(pickup_i--);
 
-					s_v4 color = g_pickup_data[pickup.type].color;
+					s_v4 color = c_score_pickup_color;
 
 					for(int i = 0; i < 100; i++)
 					{
@@ -403,6 +419,59 @@ func void update()
 						game->particles.add(p);
 					}
 					g_platform_funcs.play_sound(game->jump2_sound);
+				}
+			}
+
+			foreach_raw(pickup_i, pickup, game->death_pickups)
+			{
+				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
+				{
+					game->reset_level = true;
+					g_platform_funcs.play_sound(game->fail_sound);
+					game->death_pickups.remove_and_swap(pickup_i--);
+
+					s_v4 color = c_death_pickup_color;
+
+					for(int i = 0; i < 100; i++)
+					{
+						s_particle p = zero;
+						p.render_type = 0;
+						p.pos = ball_pos_before_collision;
+						p.duration = 0.5f * rng->randf32();
+						p.render_type = 1;
+						p.color = color;
+						p.radius = level.ball_radius * 2 * rng->randf32();
+						p.dir.x = (float)rng->randf2();
+						p.dir.y = (float)rng->randf2();
+						p.dir = v2_normalized(p.dir);
+						p.speed = 400 * rng->randf32();
+						game->particles.add(p);
+					}
+					g_platform_funcs.play_sound(game->jump2_sound);
+				}
+			}
+
+			foreach_raw(portal_i, portal, game->portals)
+			{
+				if(circle_collides_circle(ball->pos, level.ball_radius, portal.active, portal.radius))
+				{
+					ball->pos = portal.target;
+					// for(int i = 0; i < 100; i++)
+					// {
+					// 	s_particle p = zero;
+					// 	p.render_type = 0;
+					// 	p.pos = ball_pos_before_collision;
+					// 	p.duration = 0.5f * rng->randf32();
+					// 	p.render_type = 1;
+					// 	p.color = color;
+					// 	p.radius = level.ball_radius * 2 * rng->randf32();
+					// 	p.dir.x = (float)rng->randf2();
+					// 	p.dir.y = (float)rng->randf2();
+					// 	p.dir = v2_normalized(p.dir);
+					// 	p.speed = 400 * rng->randf32();
+					// 	game->particles.add(p);
+					// }
+					// g_platform_funcs.play_sound(game->jump2_sound);
 				}
 			}
 
@@ -432,6 +501,7 @@ func void update()
 					game->current_level += 1;
 				}
 				game->spawn_obstacles = false;
+				game->spawn_portals = false;
 				game->score = 0;
 				ball->speed = game->levels[game->current_level].ball_speed;
 				g_platform_funcs.play_sound(game->win_sound);
@@ -507,14 +577,30 @@ func void render(float dt)
 
 			draw_text(format_text("%i/%i", game->score, level.score_to_beat), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 
-			foreach_raw(pickup_i, pickup, game->pickups)
+			foreach_raw(pickup_i, pickup, game->score_pickups)
 			{
-				s_v4 color = g_pickup_data[pickup.type].color;
+				s_v4 color = c_score_pickup_color;
 
 				draw_circle(pickup.pos, 4, pickup.radius, color);
 				s_v4 light_color = color;
 				light_color.w = 0.25f;
 				draw_circle(pickup.pos, 4, pickup.radius * 2, light_color);
+			}
+
+			foreach_raw(pickup_i, pickup, game->death_pickups)
+			{
+				s_v4 color = c_death_pickup_color;
+
+				draw_circle(pickup.pos, 4, pickup.radius, color);
+				s_v4 light_color = color;
+				light_color.w = 0.25f;
+				draw_circle(pickup.pos, 4, pickup.radius * 2, light_color);
+			}
+
+			foreach_raw(portal_i, portal, game->portals)
+			{
+				draw_circle(portal.active, 4, portal.radius, v4(1, 0, 1, 1));
+				draw_circle(portal.target, 4, portal.radius, v4(1, 0, 1, 1));
 			}
 
 			draw_text(format_text("Level: %i", game->current_level + 1), v2(0,0), 4, make_color(1), e_font_medium, false);
@@ -879,6 +965,7 @@ func s_level make_level()
 	level.paddles_give_score = true;
 	level.paddle_speed = 250;
 	level.obstacle_radius = 16;
+	level.portal_radius = 32;
 	return level;
 }
 
@@ -1038,6 +1125,37 @@ func void init_levels()
 		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 16;
+		game->levels.add(level);
+	}
+
+	// @Note(tkap, 08/07/2023): Portals
+	{
+		s_level level = make_level();
+		level.score_to_beat = 5;
+		level.portals = true;
+		level.ball_speed *= 0.25f;
+		level.speed_boost *= 0.25f;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.score_to_beat = 5;
+		level.portals = true;
+		level.portal_radius *= 0.75f;
+		level.ball_speed *= 0.33f;
+		level.speed_boost *= 0.25f;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.score_to_beat = 5;
+		level.portals = true;
+		level.portal_radius *= 0.5f;
+		level.ball_speed *= 0.5f;
+		level.speed_boost *= 0.25f;
+		level.paddle_size.y *= 2;
 		game->levels.add(level);
 	}
 }
