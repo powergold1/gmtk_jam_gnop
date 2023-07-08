@@ -192,17 +192,17 @@ func void update()
 			{
 				game->go_to_previous_level = true;
 			}
+			if(is_key_pressed(c_key_f1))
+			{
+				game->current_level = game->levels.count - 2;
+				game->beat_level = true;
+			}
 			#endif // m_debug
 
 			s_ball* ball = &game->ball;
 			s_paddle* paddle = &game->paddle;
 			s_rng* rng = &game->rng;
 			s_level level = game->levels[game->current_level];
-
-			if(is_key_pressed(c_key_f))
-			{
-				game->reset_game = true;
-			}
 
 			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		reset game start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 			if(game->reset_game)
@@ -235,6 +235,8 @@ func void update()
 					ball->dir.x = -1;
 				}
 				paddle->y = c_half_res.y;
+
+				paddle->dir = rng->rand_bool() ? 1.0f : -1.0f;
 			}
 
 			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update ball start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
@@ -250,15 +252,20 @@ func void update()
 				paddle->x += c_base_res.x * -ball->dir.x;
 				paddle->x += level.paddle_size.x * ball->dir.x;
 
-				// @Note(tkap, 08/07/2023): Place paddle at random position that doesn't overlap with previous position
+				if(!level.synced_paddles)
 				{
-					float prev_paddle_y = paddle->y;
-					int attempts = 0;
-					while(attempts < 100)
+					paddle->dir = rng->rand_bool() ? 1.0f : -1.0f;
+
+					// @Note(tkap, 08/07/2023): Place paddle at random position that doesn't overlap with previous position
 					{
-						paddle->y = rng->randf_range(level.paddle_size.y / 2, c_base_res.y - level.paddle_size.y / 2);
-						if(fabsf(paddle->y - prev_paddle_y) > level.paddle_size.y) { break; }
-						attempts++;
+						float prev_paddle_y = paddle->y;
+						int attempts = 0;
+						while(attempts < 100)
+						{
+							paddle->y = rng->randf_range(level.paddle_size.y / 2, c_base_res.y - level.paddle_size.y / 2);
+							if(fabsf(paddle->y - prev_paddle_y) > level.paddle_size.y) { break; }
+							attempts++;
+						}
 					}
 				}
 				ball->dir.x = -ball->dir.x;
@@ -287,7 +294,7 @@ func void update()
 					game->particles.add_checked(p);
 				}
 
-				if(level.spawn_pickups)
+				if(level.spawn_pickups && game->pickups.count == 0)
 				{
 					// if(rng->chance100(25))
 					{
@@ -301,6 +308,23 @@ func void update()
 				}
 
 			}
+
+			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update paddles start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+			if(level.moving_paddles)
+			{
+				paddle->y += paddle->dir * level.paddle_speed * delta;
+				if(paddle->y - level.paddle_size.y / 2 < 0)
+				{
+					paddle->y = level.paddle_size.y / 2;
+					paddle->dir = 1;
+				}
+				else if(paddle->y + level.paddle_size.y / 2 > c_base_res.y)
+				{
+					paddle->y = c_base_res.y - level.paddle_size.y / 2;
+					paddle->dir = -1;
+				}
+			}
+			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update paddles end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 			foreach_raw(pickup_i, pickup, game->pickups)
 			{
@@ -797,26 +821,33 @@ func s_level make_level()
 	level.paddle_size = v2(16, 128);
 	level.score_to_beat = 10;
 	level.paddles_give_score = true;
+	level.paddle_speed = 250;
 	return level;
 }
 
 func void init_levels()
 {
 	game->levels.count = 0;
+
+	// @Note(tkap, 08/07/2023): Basic
 	{
 		s_level level = make_level();
 		game->levels.add(level);
 	}
+
 	{
 		s_level level = make_level();
 		level.paddle_size.y *= 0.75f;
 		game->levels.add(level);
 	}
+
 	{
 		s_level level = make_level();
 		level.paddle_size.y *= 0.5f;
 		game->levels.add(level);
 	}
+
+	// @Note(tkap, 08/07/2023): Slow then fast
 	{
 		s_level level = make_level();
 		level.ball_speed *= 0.5f;
@@ -824,6 +855,7 @@ func void init_levels()
 		level.score_to_beat = 2;
 		game->levels.add(level);
 	}
+
 	{
 		s_level level = make_level();
 		level.ball_speed *= 0.5f;
@@ -834,9 +866,91 @@ func void init_levels()
 
 	{
 		s_level level = make_level();
+		level.ball_speed *= 0.5f;
+		level.speed_boost = 1200;
+		level.score_to_beat = 4;
+		game->levels.add(level);
+	}
+
+	// @Note(tkap, 08/07/2023): Collect
+	{
+		s_level level = make_level();
 		level.spawn_pickups = true;
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.spawn_pickups = true;
+		level.ball_speed *= 1.33f;
+		level.paddles_give_score = false;
+		level.score_to_beat = 5;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.spawn_pickups = true;
+		level.ball_speed *= 1.66f;
+		level.paddles_give_score = false;
+		level.score_to_beat = 5;
+		game->levels.add(level);
+	}
+
+	// @Note(tkap, 08/07/2023): Moving paddles
+	{
+		s_level level = make_level();
+		level.moving_paddles = true;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.moving_paddles = true;
+		level.paddle_speed *= 2;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.moving_paddles = true;
+		level.paddle_speed *= 2.5f;
+		game->levels.add(level);
+	}
+
+	// @Note(tkap, 08/07/2023): Synced paddles
+	{
+		s_level level = make_level();
+		level.synced_paddles = true;
+		level.moving_paddles = true;
+		level.score_to_beat = 100;
+		level.paddle_size.y *= 2;
+		level.ball_speed *= 3;
+		level.speed_boost *= 4;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.synced_paddles = true;
+		level.moving_paddles = true;
+		level.score_to_beat = 100;
+		level.paddle_size.y *= 1.5f;
+		level.ball_speed *= 3;
+		level.speed_boost *= 4;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.synced_paddles = true;
+		level.moving_paddles = true;
+		level.score_to_beat = 100;
+		level.paddle_size.y *= 1.0f;
+		level.ball_speed *= 3;
+		level.speed_boost *= 4;
 		game->levels.add(level);
 	}
 }

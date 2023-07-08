@@ -88,6 +88,7 @@ struct s_paddle
 		};
 		s_v2 pos;
 	};
+	float dir;
 };
 
 struct s_pickup
@@ -120,8 +121,11 @@ struct s_level
 {
 	b8 spawn_pickups;
 	b8 paddles_give_score;
+	b8 moving_paddles;
+	b8 synced_paddles;
 	int score_to_beat;
 	s_v2 paddle_size;
+	float paddle_speed;
 	float ball_radius;
 	float speed_boost;
 	float ball_speed;
@@ -139,11 +143,11 @@ struct s_game
 	int level_count;
 	int update_count;
 	int frame_count;
+	float total_time;
 	s_v2 title_pos;
 	s_v3 title_color;
 	s_ball ball;
 	s_paddle paddle;
-	float total_time;
 	f64 update_timer;
 	s_rng rng;
 	e_state state;
