@@ -186,8 +186,8 @@ struct s_game
 
 	u32 programs[e_shader_count];
 
-	s_sound jump_sound;
-	s_sound jump2_sound;
+	s_sound paddle_sound;
+	s_sound score_pickup_sound;
 	s_sound win_sound;
 	s_sound fail_sound;
 	s_sound portal_sound;

@@ -96,8 +96,8 @@ m_update_game(update_game)
 
 		platform_funcs.set_swap_interval(1);
 
-		game->jump_sound = load_wav("assets/jump.wav", frame_arena);
-		game->jump2_sound = load_wav("assets/jump2.wav", frame_arena);
+		game->paddle_sound = load_wav("assets/jump.wav", frame_arena);
+		game->score_pickup_sound = load_wav("assets/jump2.wav", frame_arena);
 		game->win_sound = load_wav("assets/win.wav", frame_arena);
 		game->fail_sound = load_wav("assets/fail.wav", frame_arena);
 		game->portal_sound = load_wav("assets/portal.wav", frame_arena);
@@ -352,7 +352,8 @@ func void update()
 				}
 				ball->dir.x = -ball->dir.x;
 				ball->speed += level.speed_boost;
-				g_platform_funcs.play_sound(game->jump_sound);
+				ball->speed = at_most(c_ball_max_speed, ball->speed);
+				g_platform_funcs.play_sound(game->paddle_sound);
 
 				if(level.paddles_give_score)
 				{
@@ -431,7 +432,7 @@ func void update()
 						p.speed = 400 * rng->randf32();
 						game->particles.add(p);
 					}
-					g_platform_funcs.play_sound(game->jump2_sound);
+					g_platform_funcs.play_sound(game->score_pickup_sound);
 				}
 			}
 
@@ -460,7 +461,7 @@ func void update()
 						p.speed = 400 * rng->randf32();
 						game->particles.add(p);
 					}
-					g_platform_funcs.play_sound(game->jump2_sound);
+					g_platform_funcs.play_sound(game->score_pickup_sound);
 				}
 			}
 
@@ -1183,6 +1184,77 @@ func void init_levels()
 		level.paddle_size.y *= 2;
 		game->levels.add(level);
 	}
+
+	// @Note(tkap, 08/07/2023): Collect + slow then fast
+	{
+		s_level level = make_level();
+		level.ball_speed *= 0.5f;
+		level.speed_boost = 600;
+		level.spawn_pickups = true;
+		level.paddles_give_score = false;
+		level.score_to_beat = 3;
+		level.paddle_size.y *= 2;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.ball_speed *= 0.5f;
+		level.speed_boost = 600;
+		level.spawn_pickups = true;
+		level.paddles_give_score = false;
+		level.score_to_beat = 4;
+		level.paddle_size.y *= 2;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.ball_speed *= 0.5f;
+		level.speed_boost = 600;
+		level.spawn_pickups = true;
+		level.paddles_give_score = false;
+		level.score_to_beat = 5;
+		level.paddle_size.y *= 3;
+		game->levels.add(level);
+	}
+
+	// @Note(tkap, 08/07/2023): Moving paddles + portal
+	{
+		s_level level = make_level();
+		level.moving_paddles = true;
+		level.score_to_beat = 5;
+		level.paddle_speed *= 2;
+		level.portals = true;
+		level.ball_speed *= 0.33f;
+		level.speed_boost *= 0.33f;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.moving_paddles = true;
+		level.score_to_beat = 5;
+		level.paddle_speed *= 2;
+		level.portals = true;
+		level.ball_speed *= 0.33f;
+		level.speed_boost *= 0.33f;
+		level.paddle_size.y *= 0.75f;
+		game->levels.add(level);
+	}
+
+	{
+		s_level level = make_level();
+		level.moving_paddles = true;
+		level.score_to_beat = 5;
+		level.paddle_speed *= 2;
+		level.portals = true;
+		level.ball_speed *= 0.4f;
+		level.speed_boost *= 0.4f;
+		level.paddle_size.y *= 0.5f;
+		game->levels.add(level);
+	}
+
 }
 
 func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)

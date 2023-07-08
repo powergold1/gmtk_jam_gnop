@@ -25,3 +25,4 @@ global constexpr float c_ball_hit_time = 0.5f;
 global constexpr s_v4 c_score_pickup_color = make_color(0, 1, 0);
 global constexpr s_v4 c_death_pickup_color = make_color(1, 0, 0);
 global constexpr s_v4 c_portal_color = make_color(1, 0, 1);
+global constexpr float c_ball_max_speed = 30000;
