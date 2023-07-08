@@ -22,6 +22,7 @@ struct s_transform
 	shader_bool do_clip;
 	shader_bool do_circle;
 	shader_bool do_light;
+	shader_bool do_noise;
 	shader_bool flip_x;
 	shader_int layer;
 	shader_int texture_id;

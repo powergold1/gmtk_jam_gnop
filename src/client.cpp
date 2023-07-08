@@ -100,6 +100,9 @@ m_update_game(update_game)
 		game->jump2_sound = load_wav("assets/jump2.wav", frame_arena);
 		game->win_sound = load_wav("assets/win.wav", frame_arena);
 		game->fail_sound = load_wav("assets/fail.wav", frame_arena);
+		game->portal_sound = load_wav("assets/portal.wav", frame_arena);
+
+		game->noise = load_texture_from_file("assets/noise.png", GL_LINEAR);
 
 		game->font_arr[e_font_small] = load_font("assets/consola.ttf", 24, frame_arena);
 		game->font_arr[e_font_medium] = load_font("assets/consola.ttf", 36, frame_arena);
@@ -159,8 +162,18 @@ m_update_game(update_game)
 }
 }
 
+global bool paused = false;
 func void update()
 {
+	if(is_key_pressed(c_key_f))
+	{
+		paused = !paused;
+	}
+	float delta = c_delta;
+	if(paused)
+	{
+		delta = 0;
+	}
 	game->update_count += 1;
 	g_platform_funcs.show_cursor(false);
 	switch(game->state)
@@ -281,7 +294,7 @@ func void update()
 				game->portals.count = 0;
 				game->death_pickups.count = 0;
 				s_portal portal = zero;
-				float temp = ball->dir.x > 0 ? 0.2f : 0.8f;
+				float temp = ball->dir.x > 0 ? 0.3f : 0.7f;
 				portal.active.x = c_base_res.x * temp;
 				portal.active.y = c_base_res.y * rng->randf32();
 				portal.target.x = c_base_res.x * (1.0f - temp);
@@ -456,22 +469,20 @@ func void update()
 				if(circle_collides_circle(ball->pos, level.ball_radius, portal.active, portal.radius))
 				{
 					ball->pos = portal.target;
-					// for(int i = 0; i < 100; i++)
-					// {
-					// 	s_particle p = zero;
-					// 	p.render_type = 0;
-					// 	p.pos = ball_pos_before_collision;
-					// 	p.duration = 0.5f * rng->randf32();
-					// 	p.render_type = 1;
-					// 	p.color = color;
-					// 	p.radius = level.ball_radius * 2 * rng->randf32();
-					// 	p.dir.x = (float)rng->randf2();
-					// 	p.dir.y = (float)rng->randf2();
-					// 	p.dir = v2_normalized(p.dir);
-					// 	p.speed = 400 * rng->randf32();
-					// 	game->particles.add(p);
-					// }
-					// g_platform_funcs.play_sound(game->jump2_sound);
+					spawn_particles(100, {
+						.render_type = 1,
+						.speed = 400,
+						.speed_rand = 1,
+						.radius = portal.radius,
+						.radius_rand = 1,
+						.duration = 0.5f,
+						.duration_rand = 1,
+						.angle_rand = 1,
+						.pos = portal.active,
+						.color = c_portal_color,
+						.color_rand = 0.25f,
+					});
+					g_platform_funcs.play_sound(game->portal_sound);
 				}
 			}
 
@@ -582,25 +593,26 @@ func void render(float dt)
 				s_v4 color = c_score_pickup_color;
 
 				draw_circle(pickup.pos, 4, pickup.radius, color);
-				s_v4 light_color = color;
-				light_color.w = 0.25f;
-				draw_circle(pickup.pos, 4, pickup.radius * 2, light_color);
+				s_v4 light_color = v4(1);
+				draw_circle_p(pickup.pos, 5, pickup.radius * 0.7f, light_color);
 			}
 
 			foreach_raw(pickup_i, pickup, game->death_pickups)
 			{
 				s_v4 color = c_death_pickup_color;
 
-				draw_circle(pickup.pos, 4, pickup.radius, color);
-				s_v4 light_color = color;
-				light_color.w = 0.25f;
-				draw_circle(pickup.pos, 4, pickup.radius * 2, light_color);
+				draw_circle_p(pickup.pos, 4, pickup.radius, color);
+				s_v4 light_color = v4(1);
+				draw_circle_p(pickup.pos, 5, pickup.radius * 0.7f, light_color);
 			}
 
 			foreach_raw(portal_i, portal, game->portals)
 			{
-				draw_circle(portal.active, 4, portal.radius, v4(1, 0, 1, 1));
-				draw_circle(portal.target, 4, portal.radius, v4(1, 0, 1, 1));
+				float s = range_lerp(sinf(game->total_time * 4), -1, 1, 0.8f, 1.0f);
+				draw_circle(portal.active, 4, portal.radius, c_portal_color, {.do_noise = 1});
+				draw_circle(portal.target, 4, portal.radius, c_portal_color, {.do_noise = 1});
+				draw_circle(portal.active, 5, portal.radius * 0.6f * s, v4(0.01f, 0.01f, 0.01f, 1));
+				draw_circle(portal.target, 5, portal.radius * 0.6f * s, v4(0.01f, 0.01f, 0.01f, 1));
 			}
 
 			draw_text(format_text("Level: %i", game->current_level + 1), v2(0,0), 4, make_color(1), e_font_medium, false);
@@ -656,6 +668,9 @@ func void render(float dt)
 		if(transforms.count > 0)
 		{
 			glBindVertexArray(game->default_vao);
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, game->noise.id);
+			glUniform1i(1, 1);
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 			// glBlendFunc(GL_ONE, GL_ONE);
@@ -681,6 +696,7 @@ func void render(float dt)
 			if(text_arr[font_i].count > 0)
 			{
 				s_font* font = &game->font_arr[font_i];
+				glActiveTexture(GL_TEXTURE0);
 				glBindTexture(GL_TEXTURE_2D, font->texture.id);
 				glEnable(GL_BLEND);
 				glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
@@ -818,6 +834,15 @@ func s_texture load_texture_from_data(void* data, int width, int height, u32 fil
 	s_texture texture = zero;
 	texture.id = id;
 	texture.size = v22i(width, height);
+	return texture;
+}
+
+func s_texture load_texture_from_file(char* path, u32 filtering)
+{
+	int width, height, num_channels;
+	void* data = stbi_load(path, &width, &height, &num_channels, 4);
+	s_texture texture = load_texture_from_data(data, width, height, filtering);
+	stbi_image_free(data);
 	return texture;
 }
 
@@ -965,7 +990,7 @@ func s_level make_level()
 	level.paddles_give_score = true;
 	level.paddle_speed = 250;
 	level.obstacle_radius = 16;
-	level.portal_radius = 32;
+	level.portal_radius = 64;
 	return level;
 }
 
@@ -1183,4 +1208,26 @@ func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)
 func char* handle_plural(int num)
 {
 	return (num == 1 || num == -1) ? "" : "s";
+}
+
+func void spawn_particles(int count, s_particle_spawn_data data)
+{
+	for(int i = 0; i < count; i++)
+	{
+		s_particle p = zero;
+		p.render_type = data.render_type;
+		p.duration = data.duration * (1 - data.duration_rand * game->rng.randf32());
+		p.speed = data.speed * (1 - data.speed_rand * game->rng.randf32());
+		p.radius = data.radius * (1 - data.radius_rand * game->rng.randf32());
+		p.pos = data.pos;
+
+		float foo = (float)game->rng.randf2() * data.angle_rand * tau;
+		float angle = data.angle + foo;
+		p.dir = v2_from_angle(angle);
+		p.color.x = data.color.x * (1 - data.color_rand * game->rng.randf32());
+		p.color.y = data.color.y * (1 - data.color_rand * game->rng.randf32());
+		p.color.z = data.color.z * (1 - data.color_rand * game->rng.randf32());
+		p.color.w = data.color.w;
+		game->particles.add_checked(p);
+	}
 }

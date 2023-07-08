@@ -18,10 +18,10 @@ global constexpr int c_max_concurrent_sounds = 8;
 #define c_max_entities (4096)
 #define c_entities_per_thread (c_max_entities / c_num_threads)
 
-#define delta (1.0f / c_updates_per_second)
-#define c_invalid_entity (-1)
+global constexpr float c_delta = 1.0f / c_updates_per_second;
 
 global constexpr float c_ball_hit_time = 0.5f;
 
 global constexpr s_v4 c_score_pickup_color = make_color(0, 1, 0);
 global constexpr s_v4 c_death_pickup_color = make_color(1, 0, 0);
+global constexpr s_v4 c_portal_color = make_color(1, 0, 1);

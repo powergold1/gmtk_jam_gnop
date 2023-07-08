@@ -33,6 +33,7 @@ X(PFNWGLGETSWAPINTERVALEXTPROC, wglGetSwapIntervalEXT) \
 X(PFNGLBLENDEQUATIONPROC, glBlendEquation) \
 X(PFNGLDELETEPROGRAMPROC, glDeleteProgram) \
 X(PFNGLDELETESHADERPROC, glDeleteShader) \
+X(PFNGLUNIFORM1IPROC, glUniform1i) \
 X(PFNGLUNIFORM1FPROC, glUniform1f)
 
 #define X(type, name) extern type name;

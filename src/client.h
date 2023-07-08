@@ -104,6 +104,22 @@ struct s_death_pickup : s_entity
 	float radius;
 };
 
+struct s_particle_spawn_data
+{
+	s8 render_type;
+	float speed;
+	float speed_rand;
+	float radius;
+	float radius_rand;
+	float duration;
+	float duration_rand;
+	float angle;
+	float angle_rand;
+	s_v2 pos;
+	s_v4 color;
+	float color_rand;
+};
+
 struct s_particle
 {
 	s8 render_type;
@@ -174,6 +190,9 @@ struct s_game
 	s_sound jump2_sound;
 	s_sound win_sound;
 	s_sound fail_sound;
+	s_sound portal_sound;
+
+	s_texture noise;
 };
 
 func void update();
@@ -201,6 +220,8 @@ func s_v4 get_ball_color(s_ball ball);
 func void init_levels();
 func void do_ball_trail(s_ball old_ball, s_ball ball, float radius);
 func char* handle_plural(int num);
+func s_texture load_texture_from_file(char* path, u32 filtering);
+func void spawn_particles(int count, s_particle_spawn_data data);
 
 #ifdef m_debug
 func void hot_reload_shaders(void);
