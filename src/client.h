@@ -159,6 +159,7 @@ struct s_game
 	b8 reset_level;
 	b8 beat_level;
 	b8 go_to_previous_level;
+	b8 spawn_obstacles;
 	int current_level;
 	int score;
 	int level_count;
@@ -212,7 +213,7 @@ void gl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, G
 func void sine_alpha_system(int start, int count);
 func s_v4 get_ball_color(s_ball ball);
 func void init_levels();
-func void do_ball_trail(s_ball ball, float radius);
+func void do_ball_trail(s_ball old_ball, s_ball ball, float radius);
 func char* handle_plural(int num);
 
 #ifdef m_debug

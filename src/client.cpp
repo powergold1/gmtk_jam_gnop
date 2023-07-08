@@ -171,10 +171,13 @@ func void update()
 				c_half_res.x,
 				range_lerp(sinf(game->total_time * 2), -1, 1, c_base_res.y * 0.2f, c_base_res.y * 0.4f)
 			);
-			game->ball.x = c_half_res.x;
-			game->ball.y = clamp(g_platform_data.mouse.y, 0.0f, c_base_res.y);
+			s_ball* ball = &game->ball;
+			s_ball old_ball = *ball;
+			ball->x = c_half_res.x;
+			ball->y = lerp(ball->y, g_platform_data.mouse.y, 40.0f * delta);
+			ball->y = clamp(ball->y, 0.0f, c_base_res.y);
 			game->title_color = v3(sinf2(game->total_time), 1, 1);
-			do_ball_trail(game->ball, 16);
+			do_ball_trail(old_ball, *ball, 16);
 
 			if(g_platform_data.any_key_pressed)
 			{
@@ -225,6 +228,7 @@ func void update()
 				ball->speed = level.ball_speed;
 				ball->hit_time = 0;
 				ball->x = c_half_res.x;
+
 				if(rng->rand_bool())
 				{
 					paddle->x = c_base_res.x - level.paddle_size.x / 2;
@@ -237,42 +241,48 @@ func void update()
 				}
 				paddle->y = c_half_res.y;
 
-				paddle->dir = rng->rand_bool() ? 1.0f : -1.0f;
+				paddle->dir = 1;
+			}
 
-				if(level.obstacles)
+			if(game->spawn_obstacles)
+			{
+				game->pickups.count = 0;
+				game->spawn_obstacles = false;
+				for(int i = 0; i < 15; i++)
 				{
-					for(int i = 0; i < 20; i++)
+					s_v2 topleft;
+					s_v2 bottomright;
+					if(ball->dir.x < 0)
 					{
-						s_v2 topleft;
-						s_v2 bottomright;
-						if(rng->rand_bool())
-						{
-							topleft = v2(0, 0);
-							bottomright = v2(c_base_res.x * 0.35f, c_base_res.y);
-						}
-						else
-						{
-							topleft = v2(c_base_res.x * 0.65f, 0);
-							bottomright = v2(c_base_res.x, c_base_res.y);
-						}
-						float x = rng->randf_range(topleft.x, bottomright.x);
-						float y = rng->randf_range(topleft.y, bottomright.y);
-
-						s_pickup pickup = zero;
-						pickup.x = x;
-						pickup.y = y;
-						pickup.type = e_pickup_death;
-						pickup.radius = level.obstacle_radius;
-						game->pickups.add_checked(pickup);
+						topleft = v2(c_base_res.x * 0.1f, 0);
+						bottomright = v2(c_base_res.x * 0.45f, c_base_res.y);
 					}
+					else
+					{
+						topleft = v2(c_base_res.x * 0.55f, 0);
+						bottomright = v2(c_base_res.x * 0.9f, c_base_res.y);
+					}
+					float x = rng->randf_range(topleft.x, bottomright.x);
+					float y = rng->randf_range(topleft.y, bottomright.y);
+
+					s_pickup pickup = zero;
+					pickup.x = x;
+					pickup.y = y;
+					pickup.type = e_pickup_death;
+					pickup.radius = level.obstacle_radius;
+					game->pickups.add_checked(pickup);
 				}
 			}
 
 			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update ball start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-			// if(game->update_count % 10 == 0)
-			do_ball_trail(*ball, level.ball_radius);
+			s_ball old_ball = *ball;
 
 			ball->x += ball->dir.x * delta * ball->speed;
+			ball->y = lerp(ball->y, g_platform_data.mouse.y, 40.0f * delta);
+			ball->y = clamp(ball->y, 0.0f, c_base_res.y);
+
+			do_ball_trail(old_ball, *ball, level.ball_radius);
+
 			ball->hit_time = at_least(0.0f, ball->hit_time - delta);
 			s_v2 ball_pos_before_collision = ball->pos;
 			if(rect_collides_circle(paddle->pos, level.paddle_size, ball->pos, level.ball_radius))
@@ -280,6 +290,7 @@ func void update()
 				ball->x = paddle->x - (level.paddle_size.x / 2.0f * ball->dir.x) - (level.ball_radius * ball->dir.x);
 				paddle->x += c_base_res.x * -ball->dir.x;
 				paddle->x += level.paddle_size.x * ball->dir.x;
+				if(level.obstacles) { game->spawn_obstacles = true; }
 
 				if(!level.synced_paddles)
 				{
@@ -395,7 +406,6 @@ func void update()
 				}
 			}
 
-			ball->y = clamp(g_platform_data.mouse.y, 0.0f, c_base_res.y);
 			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update ball end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 			if(ball->x > c_base_res.x + level.ball_radius || ball->x < level.ball_radius)
@@ -1006,7 +1016,7 @@ func void init_levels()
 	{
 		s_level level = make_level();
 		level.obstacles = true;
-		level.score_to_beat = 5;
+		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 8;
 		game->levels.add(level);
@@ -1015,7 +1025,7 @@ func void init_levels()
 	{
 		s_level level = make_level();
 		level.obstacles = true;
-		level.score_to_beat = 5;
+		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 12;
 		game->levels.add(level);
@@ -1024,22 +1034,31 @@ func void init_levels()
 	{
 		s_level level = make_level();
 		level.obstacles = true;
-		level.score_to_beat = 5;
+		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 16;
 		game->levels.add(level);
 	}
 }
 
-func void do_ball_trail(s_ball ball, float radius)
+func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)
 {
-	s_particle particle = zero;
-	particle.pos = ball.pos;
-	particle.radius = radius;
-	particle.color = get_ball_color(ball);
-	particle.duration = 0.25f;
-	particle.render_type = 0;
-	game->particles.add_checked(particle);
+	float movement = v2_length(ball.pos - old_ball.pos);
+	int count = ceilfi(movement / radius * 8);
+	for(int i = 0; i < count; i++)
+	{
+		s_ball temp = old_ball;
+		float p = count == 1 ? 1 : i / (float)(count - 1);
+		temp.pos = lerp(old_ball.pos, ball.pos, p);
+
+		s_particle particle = zero;
+		particle.pos = temp.pos;
+		particle.radius = radius;
+		particle.color = get_ball_color(temp);
+		particle.duration = 0.25f;
+		particle.render_type = 0;
+		game->particles.add_checked(particle);
+	}
 }
 
 func char* handle_plural(int num)
