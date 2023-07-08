@@ -49,7 +49,6 @@ Mkfile.old
 dkms.conf
 stamp_timer.data
 build/**
-build
 .tags
 config.txt
 *.rdbg
@@ -60,9 +59,12 @@ tags
 client
 server
 *.dll
-*.exe
+build/*.exe
 todo.txt
+stamp_timer.exe
 
 
-!client.exe
-!client.dll
+# For non compile people
+!./client.exe
+!./client.dll
+!build/client.dll
