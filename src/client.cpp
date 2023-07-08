@@ -505,7 +505,6 @@ func void render(float dt)
 			draw_circle(game->ball.pos, 5, level.ball_radius, get_ball_color(game->ball));
 			draw_rect(game->paddle.pos, 10, level.paddle_size, v4(1));
 
-			int points_left = level.score_to_beat - game->score;
 			draw_text(format_text("%i/%i", game->score, level.score_to_beat), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 
 			foreach_raw(pickup_i, pickup, game->pickups)
@@ -942,18 +941,20 @@ func void init_levels()
 	{
 		s_level level = make_level();
 		level.spawn_pickups = true;
-		level.ball_speed *= 1.33f;
+		level.ball_speed *= 1.25f;
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
+		level.speed_boost *= 0.5f;
 		game->levels.add(level);
 	}
 
 	{
 		s_level level = make_level();
 		level.spawn_pickups = true;
-		level.ball_speed *= 1.66f;
+		level.ball_speed *= 1.5f;
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
+		level.speed_boost *= 0.5f;
 		game->levels.add(level);
 	}
 

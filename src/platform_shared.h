@@ -153,6 +153,7 @@ struct s_platform_data
 	b8 recompiled;
 	b8 quit_after_this_frame;
 	b8 any_key_pressed;
+	b8 is_window_active;
 	int window_width;
 	int window_height;
 	f64 time_passed;

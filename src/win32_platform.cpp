@@ -106,6 +106,7 @@ int main(int argc, char** argv)
 		ScreenToClient(g_window.handle, &p);
 		g_platform_data.mouse.x = (float)p.x;
 		g_platform_data.mouse.y = (float)p.y;
+		g_platform_data.is_window_active = GetActiveWindow() == g_window.handle;
 
 		update_game(g_platform_data, platform_funcs, game_memory);
 		g_platform_data.recompiled = false;
@@ -379,6 +380,7 @@ func b8 init_audio()
 
 func b8 play_sound(s_sound sound)
 {
+	if(!g_platform_data.is_window_active) { return false; }
 	assert(sound.sample_count > 0);
 	assert(sound.samples);
 
