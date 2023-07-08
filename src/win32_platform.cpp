@@ -414,13 +414,7 @@ func b8 play_sound(s_sound sound)
 
 func b8 thread_safe_set_bool_to_true(volatile int* var)
 {
-	int belief = *var;
-	if(!belief)
-	{
-		int reality = InterlockedCompareExchange((LONG*)var, true, false);
-		if(reality == belief) { return true; }
-	}
-	return false;
+	return InterlockedCompareExchange((LONG*)var, true, false) == false;
 }
 
 func void init_performance()

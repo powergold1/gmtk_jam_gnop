@@ -431,6 +431,7 @@ func void update()
 				{
 					game->current_level += 1;
 				}
+				game->spawn_obstacles = false;
 				game->score = 0;
 				ball->speed = game->levels[game->current_level].ball_speed;
 				g_platform_funcs.play_sound(game->win_sound);
@@ -504,9 +505,8 @@ func void render(float dt)
 			draw_circle(game->ball.pos, 5, level.ball_radius, get_ball_color(game->ball));
 			draw_rect(game->paddle.pos, 10, level.paddle_size, v4(1));
 
-			// draw_text(format_text("%i", game->score), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 			int points_left = level.score_to_beat - game->score;
-			draw_text(format_text("%i point%s left", points_left, handle_plural(points_left)), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
+			draw_text(format_text("%i/%i", game->score, level.score_to_beat), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 
 			foreach_raw(pickup_i, pickup, game->pickups)
 			{
@@ -1055,7 +1055,7 @@ func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)
 		particle.pos = temp.pos;
 		particle.radius = radius;
 		particle.color = get_ball_color(temp);
-		particle.duration = 0.25f;
+		particle.duration = 0.15f;
 		particle.render_type = 0;
 		game->particles.add_checked(particle);
 	}
