@@ -232,6 +232,11 @@ func int floorfi(float x)
 	return (int)floorf(x);
 }
 
+func int ceilfi(float x)
+{
+	return (int)ceilf(x);
+}
+
 func float fract(float x)
 {
 	return x - (int)x;

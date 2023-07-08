@@ -10,7 +10,7 @@
 
 #pragma warning(push, 0)
 #define STB_IMAGE_IMPLEMENTATION
-#define STBI_assert assert
+#define STBI_ASSERT assert
 #include "external/stb_image.h"
 #pragma warning(pop)
 
@@ -566,21 +566,23 @@ func s_font load_font(const char* path, float font_size, s_lin_arena* arena)
 	stbtt_GetFontVMetrics(&info, &font.ascent, &font.descent, &font.line_gap);
 
 	font.scale = stbtt_ScaleForPixelHeight(&info, font_size);
-	#define max_chars 128
+	constexpr int max_chars = 128;
 	int bitmap_count = 0;
 	u8* bitmap_arr[max_chars];
 	const int padding = 10;
-	int total_width = padding;
-	int total_height = 0;
+
+	int columns = floorfi(4096 / (font_size + padding));
+	int rows = ceilfi((max_chars - columns) / (float)columns) + 1;
+
+	int total_width = floorfi(columns * (font_size + padding));
+	int total_height = floorfi(rows * (font_size + padding));
+
 	for(int char_i = 0; char_i < max_chars; char_i++)
 	{
 		s_glyph glyph = zero;
 		u8* bitmap = stbtt_GetCodepointBitmap(&info, 0, font.scale, char_i, &glyph.width, &glyph.height, 0, 0);
 		stbtt_GetCodepointBox(&info, char_i, &glyph.x0, &glyph.y0, &glyph.x1, &glyph.y1);
 		stbtt_GetGlyphHMetrics(&info, char_i, &glyph.advance_width, null);
-
-		total_width += glyph.width + padding;
-		total_height = max(glyph.height + padding * 2, total_height);
 
 		font.glyph_arr[char_i] = glyph;
 		bitmap_arr[bitmap_count++] = bitmap;
@@ -589,17 +591,20 @@ func s_font load_font(const char* path, float font_size, s_lin_arena* arena)
 	// @Fixme(tkap, 23/06/2023): Use arena
 	u8* gl_bitmap = (u8*)calloc(1, sizeof(u8) * 4 * total_width * total_height);
 
-	int current_x = padding;
 	for(int char_i = 0; char_i < max_chars; char_i++)
 	{
 		s_glyph* glyph = &font.glyph_arr[char_i];
 		u8* bitmap = bitmap_arr[char_i];
+		int column = char_i % columns;
+		int row = char_i / columns;
 		for(int y = 0; y < glyph->height; y++)
 		{
 			for(int x = 0; x < glyph->width; x++)
 			{
+				int current_x = floorfi(column * (font_size + padding));
+				int current_y = floorfi(row * (font_size + padding));
 				u8 src_pixel = bitmap[x + y * glyph->width];
-				u8* dst_pixel = &gl_bitmap[((current_x + x) + (padding + y) * total_width) * 4];
+				u8* dst_pixel = &gl_bitmap[((current_x + x) + (current_y + y) * total_width) * 4];
 				dst_pixel[0] = 255;
 				dst_pixel[1] = 255;
 				dst_pixel[2] = 255;
@@ -607,19 +612,17 @@ func s_font load_font(const char* path, float font_size, s_lin_arena* arena)
 			}
 		}
 
-		glyph->uv_min.x = current_x / (float)total_width;
-		glyph->uv_max.x = (current_x + glyph->width) / (float)total_width;
+		glyph->uv_min.x = column / (float)columns;
+		glyph->uv_max.x = glyph->uv_min.x + (glyph->width / (float)total_width);
 
-		glyph->uv_min.y = padding / (float)total_height;
+		glyph->uv_min.y = row / (float)rows;
 
 		// @Note(tkap, 17/05/2023): For some reason uv_max.y is off by 1 pixel (checked the texture in renderoc), which causes the text to be slightly miss-positioned
 		// in the Y axis. "glyph->height - 1" fixes it.
-		glyph->uv_max.y = (padding + glyph->height - 1) / (float)total_height;
+		glyph->uv_max.y = glyph->uv_min.y + (glyph->height / (float)total_height);
 
 		// @Note(tkap, 17/05/2023): Otherwise the line above makes the text be cut off at the bottom by 1 pixel...
-		glyph->uv_max.y += 0.01f;
-
-		current_x += glyph->width + padding;
+		// glyph->uv_max.y += 0.01f;
 	}
 
 	font.texture = load_texture_from_data(gl_bitmap, total_width, total_height, GL_LINEAR);
@@ -630,8 +633,6 @@ func s_font load_font(const char* path, float font_size, s_lin_arena* arena)
 	}
 
 	free(gl_bitmap);
-
-	#undef max_chars
 
 	return font;
 }
