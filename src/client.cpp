@@ -140,6 +140,28 @@ m_update_game(update_game)
 	g_window.size = v2ii(g_window.width, g_window.height);
 	g_window.center = v2_mul(g_window.size, 0.5f);
 
+
+	#ifdef m_debug
+	if(is_key_pressed(c_key_f8))
+	{
+		write_file("save_state", game, sizeof(*game));
+	}
+
+	if(is_key_pressed(c_key_f9))
+	{
+		char* data = read_file("save_state", frame_arena, null);
+		if(data)
+		{
+			memcpy(game, data, sizeof(*game));
+			game->paddle_sound = load_wav("assets/jump.wav", frame_arena);
+			game->score_pickup_sound = load_wav("assets/jump2.wav", frame_arena);
+			game->win_sound = load_wav("assets/win.wav", frame_arena);
+			game->fail_sound = load_wav("assets/fail.wav", frame_arena);
+			game->portal_sound = load_wav("assets/portal.wav", frame_arena);
+		}
+	}
+	#endif // m_debug
+
 	game->update_timer += g_platform_data.time_passed;
 	game->frame_count += 1;
 	while(game->update_timer >= c_update_delay)
@@ -166,18 +188,9 @@ m_update_game(update_game)
 }
 #endif // m_debug
 
-global bool paused = false;
 func void update()
 {
-	if(is_key_pressed(c_key_f))
-	{
-		paused = !paused;
-	}
 	float delta = c_delta;
-	if(paused)
-	{
-		delta = 0;
-	}
 	game->update_count += 1;
 	g_platform_funcs.show_cursor(false);
 	switch(game->state)
@@ -223,7 +236,7 @@ func void update()
 			s_ball* ball = &game->ball;
 			s_paddle* paddle = &game->paddle;
 			s_rng* rng = &game->rng;
-			s_level level = game->levels[game->current_level];
+			s_level* level = &game->levels[game->current_level];
 
 			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		reset game start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 			if(game->reset_game)
@@ -231,31 +244,34 @@ func void update()
 				game->reset_game = false;
 				game->current_level = 0;
 				game->reset_level = true;
-				level = game->levels[game->current_level];
+				level = &game->levels[game->current_level];
 			}
 			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		reset game end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 			if(game->reset_level)
 			{
 				game->reset_level = false;
+				init_levels();
 				game->score = 0;
+
+				game->boss_paddle.pos = v2(c_base_res.x - c_boss_paddle_size.x / 2, c_half_res.y);
 
 				game->score_pickups.count = 0;
 				game->death_pickups.count = 0;
 				game->portals.count = 0;
 				game->score = 0;
-				ball->speed = level.ball_speed;
+				ball->speed = level->ball_speed;
 				ball->hit_time = 0;
 				ball->x = c_half_res.x;
 
-				if(rng->rand_bool())
+				if(rng->rand_bool() && !level->boss)
 				{
-					paddle->x = c_base_res.x - level.paddle_size.x / 2;
+					paddle->x = c_base_res.x - level->paddle_size.x / 2;
 					ball->dir.x = 1;
 				}
 				else
 				{
-					paddle->x = level.paddle_size.x / 2;
+					paddle->x = level->paddle_size.x / 2;
 					ball->dir.x = -1;
 				}
 				paddle->y = c_half_res.y;
@@ -267,7 +283,7 @@ func void update()
 			{
 				game->death_pickups.count = 0;
 				game->spawn_obstacles = false;
-				for(int i = 0; i < 15; i++)
+				for(int i = 0; i < level->obstacle_count; i++)
 				{
 					s_v2 topleft;
 					s_v2 bottomright;
@@ -287,7 +303,7 @@ func void update()
 					s_death_pickup pickup = zero;
 					pickup.x = x;
 					pickup.y = y;
-					pickup.radius = level.obstacle_radius;
+					pickup.radius = level->obstacle_radius;
 					game->death_pickups.add_checked(pickup);
 				}
 			}
@@ -303,7 +319,7 @@ func void update()
 				portal.active.y = c_base_res.y * rng->randf32();
 				portal.target.x = c_base_res.x * (1.0f - temp);
 				portal.target.y = c_base_res.y * rng->randf32();
-				portal.radius = level.portal_radius;
+				portal.radius = level->portal_radius;
 				game->portals.add(portal);
 
 				for(int i = 0; i < 30; i++)
@@ -314,7 +330,7 @@ func void update()
 						c_half_res.x,
 						c_base_res.y * p
 					);
-					pickup.radius = level.obstacle_radius;
+					pickup.radius = level->obstacle_radius;
 					game->death_pickups.add(pickup);
 				}
 			}
@@ -326,19 +342,32 @@ func void update()
 			ball->y = lerp(ball->y, g_platform_data.mouse.y, 40.0f * delta);
 			ball->y = clamp(ball->y, 0.0f, c_base_res.y);
 
-			do_ball_trail(old_ball, *ball, level.ball_radius);
+			do_ball_trail(old_ball, *ball, level->ball_radius);
 
 			ball->hit_time = at_least(0.0f, ball->hit_time - delta);
 			s_v2 ball_pos_before_collision = ball->pos;
-			if(rect_collides_circle(paddle->pos, level.paddle_size, ball->pos, level.ball_radius))
+			if(rect_collides_circle(paddle->pos, level->paddle_size, ball->pos, level->ball_radius))
 			{
-				ball->x = paddle->x - (level.paddle_size.x / 2.0f * ball->dir.x) - (level.ball_radius * ball->dir.x);
-				paddle->x += c_base_res.x * -ball->dir.x;
-				paddle->x += level.paddle_size.x * ball->dir.x;
-				if(level.obstacles) { game->spawn_obstacles = true; }
-				if(level.portals) { game->spawn_portals = true; }
 
-				if(!level.synced_paddles)
+				if(level->boss)
+				{
+					if(game->score == 99)
+					{
+						level->ball_radius = 128;
+						ball->speed = 400;
+						ball->x = paddle->x - (level->paddle_size.x / 2.0f * ball->dir.x) - (level->ball_radius * ball->dir.x);
+					}
+				}
+				else
+				{
+					ball->x = paddle->x - (level->paddle_size.x / 2.0f * ball->dir.x) - (level->ball_radius * ball->dir.x);
+					paddle->x += c_base_res.x * -ball->dir.x;
+					paddle->x += level->paddle_size.x * ball->dir.x;
+				}
+				if(level->obstacles) { game->spawn_obstacles = true; }
+				if(level->portals) { game->spawn_portals = true; }
+
+				if(!level->synced_paddles && !level->boss)
 				{
 					paddle->dir = rng->rand_bool() ? 1.0f : -1.0f;
 
@@ -348,65 +377,150 @@ func void update()
 						int attempts = 0;
 						while(attempts < 100)
 						{
-							paddle->y = rng->randf_range(level.paddle_size.y / 2, c_base_res.y - level.paddle_size.y / 2);
-							if(fabsf(paddle->y - prev_paddle_y) > level.paddle_size.y) { break; }
+							paddle->y = rng->randf_range(level->paddle_size.y / 2, c_base_res.y - level->paddle_size.y / 2);
+							if(fabsf(paddle->y - prev_paddle_y) > level->paddle_size.y) { break; }
 							attempts++;
 						}
 					}
 				}
 				ball->dir.x = -ball->dir.x;
-				ball->speed += level.speed_boost;
+				ball->speed += level->speed_boost;
 				ball->speed = at_most(c_ball_max_speed, ball->speed);
 				g_platform_funcs.play_sound(game->paddle_sound);
 
-				if(level.paddles_give_score)
+				if(level->paddles_give_score)
 				{
 					game->score += 1;
 				}
 				ball->hit_time = c_ball_hit_time;
 
 				float l = at_least(1.0f, powf(ball->speed - 800, 0.1f));
-				for(int i = 0; i < 100; i++)
-				{
-					s_particle p = zero;
-					p.render_type = 0;
-					p.pos = ball_pos_before_collision;
-					p.duration = 0.5f * rng->randf32();
-					p.render_type = 1;
-					p.color = v4(0.5f, 0.25f, 0.05f, 1);
-					p.radius = level.ball_radius * rng->randf32() * l;
-					p.dir.x = (float)rng->randf2();
-					p.dir.y = (float)rng->randf2();
-					p.dir = v2_normalized(p.dir);
-					p.speed = 100 * rng->randf32() * l;
-					game->particles.add_checked(p);
-				}
+				spawn_particles(100, {
+					.render_type = 1,
+					.speed = 100 * l,
+					.speed_rand = 1,
+					.radius = level->ball_radius * l,
+					.radius_rand = 1,
+					.duration = 0.5f,
+					.duration_rand = 1,
+					.angle_rand = 1,
+					.pos = ball_pos_before_collision,
+					.color = v4(0.5f, 0.25f, 0.05f, 1),
+				});
 
-				if(level.spawn_pickups && game->score_pickups.count == 0)
+				if(level->spawn_pickups && game->score_pickups.count == 0)
 				{
 					s_score_pickup pickup = zero;
 					float radius = c_half_res.x * (c_base_res.y / c_base_res.x);
 					float angle = rng->randf32() * tau;
 					pickup.x = cosf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.x;
 					pickup.y = sinf(angle) * radius * sqrtf(rng->randf32()) + c_half_res.y;
-					pickup.radius = level.ball_radius;
+					pickup.radius = level->ball_radius;
 					game->score_pickups.add_checked(pickup);
 				}
 
 			}
 
-			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update paddles start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-			if(level.moving_paddles)
+			if(level->boss)
 			{
-				paddle->y += paddle->dir * level.paddle_speed * delta;
-				if(paddle->y - level.paddle_size.y / 2 < 0)
+				s_paddle* boss_paddle = &game->boss_paddle;
+				if(rect_collides_circle(boss_paddle->pos, c_boss_paddle_size, ball->pos, level->ball_radius) || game->score < 98)
 				{
-					paddle->y = level.paddle_size.y / 2;
+					ball->dir.x = -1;
+					ball->hit_time = c_ball_hit_time;
+					ball->x = boss_paddle->x - c_boss_paddle_size.x / 2.0f - level->ball_radius;
+
+					float l = at_least(1.0f, powf(ball->speed - 800, 0.1f));
+					spawn_particles(100, {
+						.render_type = 1,
+						.speed = 100 * l,
+						.speed_rand = 1,
+						.radius = level->ball_radius * l,
+						.radius_rand = 1,
+						.duration = 0.5f,
+						.duration_rand = 1,
+						.angle_rand = 1,
+						.pos = ball_pos_before_collision,
+						.color = v4(0.5f, 0.25f, 0.05f, 1),
+					});
+					g_platform_funcs.play_sound(game->paddle_sound);
+					game->score += 1;
+
+					ball->speed += level->speed_boost;
+					ball->speed = at_most(c_ball_max_speed, ball->speed);
+
+					if(game->score == 3)
+					{
+						level->moving_paddles = true;
+						level->obstacle_count = 10;
+					}
+					else if(game->score == 6)
+					{
+						level->obstacles = false;
+						game->death_pickups.count = 0;
+						level->moving_paddles = false;
+						level->speed_boost = 1000;
+					}
+					else if(game->score == 25)
+					{
+						level->moving_paddles = true;
+						level->paddle_speed *= 0.5f;
+						level->speed_boost = 0;
+					}
+					else if(game->score == 50)
+					{
+						level->moving_paddles = false;
+						level->portals = true;
+						ball->speed = 200;
+						level->speed_boost = 50;
+					}
+					else if(game->score == 55)
+					{
+						game->portals.count = 0;
+						game->death_pickups.count = 0;
+						level->portals = false;
+						ball->speed = 800;
+						level->speed_boost = 200;
+						level->moving_paddles = true;
+						level->paddle_size.y *= 0.5f;
+					}
+					else if(game->score == 100)
+					{
+						for(int i = 0; i < 32; i++)
+						{
+							spawn_particles(100, {
+								.render_type = 1,
+								.speed = 2000,
+								.speed_rand = 1,
+								.radius = level->ball_radius,
+								.radius_rand = 1,
+								.duration = 5.0f,
+								.duration_rand = 1,
+								.angle_rand = 1,
+								.pos = v2(boss_paddle->x, c_base_res.y * rng->randf32()),
+								.color = v4(0.5f, 0.25f, 0.05f, 1),
+							});
+							play_delayed_sound(rng->rand_bool() ? game->paddle_sound : game->score_pickup_sound, 0.01f + 0.01f * i);
+						}
+					}
+					if(level->obstacles) { game->spawn_obstacles = true; }
+					if(level->portals) { game->spawn_portals = true; }
+
+				}
+			}
+
+			// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		update paddles start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+			if(level->moving_paddles)
+			{
+				paddle->y += paddle->dir * level->paddle_speed * delta;
+				if(paddle->y - level->paddle_size.y / 2 < 0)
+				{
+					paddle->y = level->paddle_size.y / 2;
 					paddle->dir = 1;
 				}
-				else if(paddle->y + level.paddle_size.y / 2 > c_base_res.y)
+				else if(paddle->y + level->paddle_size.y / 2 > c_base_res.y)
 				{
-					paddle->y = c_base_res.y - level.paddle_size.y / 2;
+					paddle->y = c_base_res.y - level->paddle_size.y / 2;
 					paddle->dir = -1;
 				}
 			}
@@ -414,7 +528,7 @@ func void update()
 
 			foreach_raw(pickup_i, pickup, game->score_pickups)
 			{
-				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
+				if(circle_collides_circle(ball->pos, level->ball_radius, pickup.pos, level->ball_radius))
 				{
 					game->score += 1;
 					game->score_pickups.remove_and_swap(pickup_i--);
@@ -429,7 +543,7 @@ func void update()
 						p.duration = 0.5f * rng->randf32();
 						p.render_type = 1;
 						p.color = color;
-						p.radius = level.ball_radius * 2 * rng->randf32();
+						p.radius = level->ball_radius * 2 * rng->randf32();
 						p.dir.x = (float)rng->randf2();
 						p.dir.y = (float)rng->randf2();
 						p.dir = v2_normalized(p.dir);
@@ -442,7 +556,7 @@ func void update()
 
 			foreach_raw(pickup_i, pickup, game->death_pickups)
 			{
-				if(circle_collides_circle(ball->pos, level.ball_radius, pickup.pos, level.ball_radius))
+				if(circle_collides_circle(ball->pos, level->ball_radius, pickup.pos, level->ball_radius))
 				{
 					game->reset_level = true;
 					g_platform_funcs.play_sound(game->fail_sound);
@@ -458,7 +572,7 @@ func void update()
 						p.duration = 0.5f * rng->randf32();
 						p.render_type = 1;
 						p.color = color;
-						p.radius = level.ball_radius * 2 * rng->randf32();
+						p.radius = level->ball_radius * 2 * rng->randf32();
 						p.dir.x = (float)rng->randf2();
 						p.dir.y = (float)rng->randf2();
 						p.dir = v2_normalized(p.dir);
@@ -471,14 +585,14 @@ func void update()
 
 			foreach_raw(portal_i, portal, game->portals)
 			{
-				if(circle_collides_circle(ball->pos, level.ball_radius, portal.active, portal.radius))
+				if(circle_collides_circle(ball->pos, level->ball_radius, portal.active, portal.radius))
 				{
 					ball->pos = portal.target;
 					spawn_particles(100, {
 						.render_type = 1,
 						.speed = 400,
 						.speed_rand = 1,
-						.radius = portal.radius,
+						.radius = portal.radius * 0.5f,
 						.radius_rand = 1,
 						.duration = 0.5f,
 						.duration_rand = 1,
@@ -491,15 +605,31 @@ func void update()
 				}
 			}
 
+			if(level->boss && game->score == 99)
+			{
+				spawn_particles(1, {
+					.render_type = 1,
+					.speed = 400,
+					.speed_rand = 1,
+					.radius = level->ball_radius,
+					.radius_rand = 1,
+					.duration = 0.5f,
+					.duration_rand = 1,
+					.angle_rand = 1,
+					.pos = ball->pos,
+					.color = v4(0.5f, 0.25f, 0.05f, 1),
+				});
+			}
+
 			// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update ball end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-			if(ball->x > c_base_res.x + level.ball_radius || ball->x < level.ball_radius)
+			if(ball->x > c_base_res.x + level->ball_radius || ball->x < -level->ball_radius)
 			{
 				game->reset_level = true;
 				g_platform_funcs.play_sound(game->fail_sound);
 			}
 
-			if(game->score >= level.score_to_beat)
+			if(game->score >= level->score_to_beat)
 			{
 				game->beat_level = true;
 			}
@@ -569,6 +699,18 @@ func void update()
 	}
 	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		update particles end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+	// vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv		delayed sounds start		vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+	foreach(sound_i, sound, game->delayed_sounds)
+	{
+		sound->time += delta;
+		if(sound->time >= sound->delay)
+		{
+			g_platform_funcs.play_sound(sound->sound);
+			game->delayed_sounds.remove_and_swap(sound_i--);
+		}
+	}
+	// ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^		delayed sounds end		^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
 }
 
 func void render(float dt)
@@ -590,6 +732,11 @@ func void render(float dt)
 			s_level level = game->levels[game->current_level];
 			draw_circle(game->ball.pos, 5, level.ball_radius, get_ball_color(game->ball));
 			draw_rect(game->paddle.pos, 10, level.paddle_size, v4(1));
+
+			if(level.boss)
+			{
+				draw_rect(game->boss_paddle.pos, 10, c_boss_paddle_size, v4(1));
+			}
 
 			draw_text(format_text("%i/%i", game->score, level.score_to_beat), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
 
@@ -996,6 +1143,7 @@ func s_level make_level()
 	level.paddle_speed = 250;
 	level.obstacle_radius = 16;
 	level.portal_radius = 64;
+	level.obstacle_count = 15;
 	return level;
 }
 
@@ -1259,6 +1407,16 @@ func void init_levels()
 		game->levels.add(level);
 	}
 
+	{
+		s_level level = make_level();
+		level.boss = true;
+		level.score_to_beat = 100;
+		level.paddles_give_score = false;
+		level.obstacles = true;
+		level.speed_boost = 0;
+		game->levels.add(level);
+	}
+
 }
 
 func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)
@@ -1306,4 +1464,12 @@ func void spawn_particles(int count, s_particle_spawn_data data)
 		p.color.w = data.color.w;
 		game->particles.add_checked(p);
 	}
+}
+
+func void play_delayed_sound(s_sound sound, float delay)
+{
+	s_delayed_sound s = zero;
+	s.sound = sound;
+	s.delay = delay;
+	game->delayed_sounds.add_checked(s);
 }

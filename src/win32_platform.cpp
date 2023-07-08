@@ -26,10 +26,21 @@ static PFNWGLSWAPINTERVALEXTPROC wglSwapIntervalEXT;
 #include "memory.cpp"
 #include "platform_shared.cpp"
 
+#ifdef m_debug
 int main(int argc, char** argv)
+#else // m_debug
+int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE hInstPrev, PSTR cmdline, int cmdshow)
+#endif
 {
+	#ifdef m_debug
 	unreferenced(argc);
 	unreferenced(argv);
+	#else // m_debug
+	unreferenced(hInst);
+	unreferenced(hInstPrev);
+	unreferenced(cmdline);
+	unreferenced(cmdshow);
+	#endif
 
 	create_window((int)c_base_res.x, (int)c_base_res.y);
 	if(!init_audio())

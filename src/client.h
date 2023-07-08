@@ -141,7 +141,9 @@ struct s_level
 	b8 synced_paddles;
 	b8 obstacles;
 	b8 portals;
+	b8 boss;
 	int score_to_beat;
+	int obstacle_count;
 	float paddle_speed;
 	float ball_radius;
 	float speed_boost;
@@ -149,6 +151,13 @@ struct s_level
 	float obstacle_radius;
 	float portal_radius;
 	s_v2 paddle_size;
+};
+
+struct s_delayed_sound
+{
+	float time;
+	float delay;
+	s_sound sound;
 };
 
 struct s_game
@@ -170,6 +179,7 @@ struct s_game
 	s_v3 title_color;
 	s_ball ball;
 	s_paddle paddle;
+	s_paddle boss_paddle;
 	f64 update_timer;
 	s_rng rng;
 	e_state state;
@@ -180,6 +190,7 @@ struct s_game
 	s_sarray<s_score_pickup, 64> score_pickups;
 	s_sarray<s_death_pickup, 64> death_pickups;
 	s_sarray<s_portal, 64> portals;
+	s_sarray<s_delayed_sound, 64> delayed_sounds;
 
 	u32 default_vao;
 	u32 default_ssbo;
@@ -222,6 +233,7 @@ func void do_ball_trail(s_ball old_ball, s_ball ball, float radius);
 func char* handle_plural(int num);
 func s_texture load_texture_from_file(char* path, u32 filtering);
 func void spawn_particles(int count, s_particle_spawn_data data);
+func void play_delayed_sound(s_sound sound, float delay);
 
 #ifdef m_debug
 func void hot_reload_shaders(void);

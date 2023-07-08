@@ -62,7 +62,7 @@ server
 build/*.exe
 todo.txt
 stamp_timer.exe
-
+save_state
 
 # For non compile people
 !./client.exe

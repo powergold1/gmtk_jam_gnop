@@ -17,6 +17,7 @@ set comp=%comp% -wd4201
 set debug=2
 if %debug%==0 (
 	set comp=%comp% -O2 -MT
+	set linker=%linker% -SUBSYSTEM:windows
 )
 if %debug%==1 (
 	set comp=%comp% -O2 -Dm_debug -MTd
