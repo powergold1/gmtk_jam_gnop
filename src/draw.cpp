@@ -63,18 +63,18 @@ func void draw_texture(s_v2 pos, int layer, s_v2 size, s_v4 color, u32 texture_i
 	transforms.add(t);
 }
 
-func void draw_text(const char* text, s_v2 in_pos, int layer, s_v4 color, e_font font_id, b8 centered, s_transform t = zero)
+func void draw_text(const char* text, s_v2 in_pos, int layer, s_v4 color, s_font *font_arr, e_font font_id, b8 centered, s_transform t = zero)
 {
 	t.layer = layer;
 
-	s_font* font = &game->font_arr[font_id];
+	s_font* font = &font_arr[font_id];
 
 	int len = (int)strlen(text);
 	assert(len > 0);
 	s_v2 pos = in_pos;
 	if(centered)
 	{
-		s_v2 size = get_text_size(text, font_id);
+		s_v2 size = get_text_size(text, font);
 		pos.x -= size.x / 2;
 		pos.y -= size.y / 2;
 	}

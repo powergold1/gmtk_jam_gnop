@@ -161,8 +161,7 @@ func b8 rect_collides_circle(s_v2 rect_center, s_v2 rect_size, s_v2 center, floa
 	if(dx <= (rect_size.x/2.0f)) { return true; }
 	if(dy <= (rect_size.y/2.0f)) { return true; }
 
-	float cornerDistanceSq = (dx - rect_size.x/2.0f)*(dx - rect_size.x/2.0f) +
-													(dy - rect_size.y/2.0f)*(dy - rect_size.y/2.0f);
+	float cornerDistanceSq = (dx - rect_size.x/2.0f)*(dx - rect_size.x/2.0f) + (dy - rect_size.y/2.0f)*(dy - rect_size.y/2.0f);
 
 	collision = (cornerDistanceSq <= (radius*radius));
 
@@ -190,10 +189,12 @@ func float v2_angle(s_v2 v)
 	return atan2f(v.y, v.x);
 }
 
+#ifdef _WIN32
 func float lerp(float a, float b, float t)
 {
 	return a + (b - a) * t;
 }
+#endif
 
 func int roundfi(float x)
 {

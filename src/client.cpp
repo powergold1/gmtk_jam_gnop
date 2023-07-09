@@ -1,8 +1,13 @@
+#ifdef m_use_sdl_platform
+#include "sdl_platform.cpp"
+#endif
 
+#ifdef _WIN32
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "opengl32.lib")
 
 #include "pch_client.h"
+#endif
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #define STBTT_assert assert
@@ -36,19 +41,7 @@ global s_sarray<s_transform, 16384> transforms;
 global s_sarray<s_transform, 16384> particles;
 global s_sarray<s_transform, c_max_entities> text_arr[e_font_count];
 
-global s_lin_arena* frame_arena;
-
-global s_game_window g_window;
-global s_input* g_input;
-
-global s_platform_data g_platform_data;
-global s_platform_funcs g_platform_funcs;
-
-global s_game* game;
-
-global s_v2 previous_mouse;
-
-global s_shader_paths shader_paths[e_shader_count] = {
+constexpr s_shader_paths shader_paths[e_shader_count] = {
 	{
 		.vertex_path = "shaders/vertex.vertex",
 		.fragment_path = "shaders/fragment.fragment",
@@ -66,6 +59,18 @@ m_gl_funcs
 #include "str_builder.cpp"
 #include "audio.cpp"
 
+func void update(s_platform_data platform_data, s_game *game, s_input *input);
+func void render(s_game_window *game_window, s_game *game, float dt);
+func b8 is_key_down(s_input *,int key);
+func b8 is_key_up(s_input *,int key);
+func b8 is_key_pressed(s_input *,int key);
+func b8 is_key_released(s_input *,int key);
+func void init_levels(s_sarray<s_level, 128> *levels);
+func void do_ball_trail(s_sarray<s_particle, 16384> *particles, s_ball old_ball, s_ball ball, float radius);
+func void play_delayed_sound(s_sarray<s_delayed_sound, 64> *delayed_sounds, s_sound sound, float delay);
+func void spawn_particles(s_sarray<s_particle, 16384> *particles, s_rng *rng, int count, s_particle_spawn_data data);
+func u32 load_shader(const char* vertex_path, const char* fragment_path, s_lin_arena *lin_arena);
+
 #ifdef m_debug
 extern "C" {
 __declspec(dllexport)
@@ -74,16 +79,19 @@ m_update_game(update_game)
 {
 	static_assert(c_game_memory >= sizeof(s_game));
 	static_assert((c_max_entities % c_num_threads) == 0);
-	game = (s_game*)game_memory;
-	frame_arena = platform_data.frame_arena;
-	g_platform_funcs = platform_funcs;
-	g_platform_data = platform_data;
-	g_input = platform_data.input;
+	s_game *game = (s_game*)game_memory;
+	s_lin_arena *frame_arena = platform_data.frame_arena;
+	s_input* input = platform_data.input;
+	s_game_window game_window;
+	game_window.width = platform_data.window_width;
+	game_window.height = platform_data.window_height;
+	game_window.size = v2ii(game_window.width, game_window.height);
+	game_window.center = v2_mul(game_window.size, 0.5f);
 
 	if(!game->initialized)
 	{
 		game->initialized = true;
-		#define X(type, name) name = (type)platform_funcs.load_gl_func(#name);
+		#define X(type, name) name = (type)platform_load_gl_func(#name);
 		m_gl_funcs
 		#undef X
 
@@ -95,7 +103,7 @@ m_update_game(update_game)
 
 		game->state = e_state_main_menu;
 
-		platform_funcs.set_swap_interval(1);
+		platform_set_swap_interval(1);
 
 		game->paddle_sound = load_wav("assets/jump.wav", frame_arena);
 		game->score_pickup_sound = load_wav("assets/jump2.wav", frame_arena);
@@ -112,7 +120,7 @@ m_update_game(update_game)
 
 		for(int shader_i = 0; shader_i < e_shader_count; shader_i++)
 		{
-			game->programs[shader_i] = load_shader(shader_paths[shader_i].vertex_path, shader_paths[shader_i].fragment_path);
+			game->programs[shader_i] = load_shader(shader_paths[shader_i].vertex_path, shader_paths[shader_i].fragment_path, frame_arena);
 		}
 
 		glGenVertexArrays(1, &game->default_vao);
@@ -123,31 +131,25 @@ m_update_game(update_game)
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, game->default_ssbo);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(transforms.elements), null, GL_DYNAMIC_DRAW);
 
-		init_levels();
+		init_levels(&game->levels);
 	}
 
 	if(platform_data.recompiled)
 	{
-		init_levels();
-		#define X(type, name) name = (type)platform_funcs.load_gl_func(#name);
+		init_levels(&game->levels);
+		#define X(type, name) name = (type)platform_load_gl_func(#name);
 		m_gl_funcs
 		#undef X
 	}
 
 
-	g_window.width = platform_data.window_width;
-	g_window.height = platform_data.window_height;
-	g_window.size = v2ii(g_window.width, g_window.height);
-	g_window.center = v2_mul(g_window.size, 0.5f);
-
-
 	#ifdef m_debug
-	if(is_key_pressed(c_key_f8))
+	if(is_key_pressed(input, c_key_f8))
 	{
 		write_file("save_state", game, sizeof(*game));
 	}
 
-	if(is_key_pressed(c_key_f9))
+	if(is_key_pressed(input, c_key_f9))
 	{
 		char* data = read_file("save_state", frame_arena, null);
 		if(data)
@@ -162,21 +164,25 @@ m_update_game(update_game)
 	}
 	#endif // m_debug
 
-	game->update_timer += g_platform_data.time_passed;
+	game->update_timer += platform_data.time_passed;
 	game->frame_count += 1;
+	b8 did_reset_key_count = false;
 	while(game->update_timer >= c_update_delay)
 	{
 		game->update_timer -= c_update_delay;
-		update();
+		update(platform_data, game, input);
 
-		for(int k_i = 0; k_i < c_max_keys; k_i++)
-		{
-			g_input->keys[k_i].count = 0;
+		if (!did_reset_key_count) {
+			for(int k_i = 0; k_i < c_max_keys; k_i++)
+			{
+				input->keys[k_i].count = 0;
+			}
+			did_reset_key_count = true;
 		}
 	}
 
 	float interpolation_dt = (float)(game->update_timer / c_update_delay);
-	render(interpolation_dt);
+	render(&game_window, game, interpolation_dt);
 	// memset(game->e.drawn_last_render, true, sizeof(game->e.drawn_last_render));
 
 	game->total_time += (float)platform_data.time_passed;
@@ -188,11 +194,11 @@ m_update_game(update_game)
 }
 #endif // m_debug
 
-func void update()
+func void update(s_platform_data platform_data, s_game *game, s_input *input)
 {
 	float delta = c_delta;
 	game->update_count += 1;
-	g_platform_funcs.show_cursor(false);
+	platform_show_cursor(false);
 	switch(game->state)
 	{
 		case e_state_main_menu:
@@ -204,12 +210,12 @@ func void update()
 			s_ball* ball = &game->ball;
 			s_ball old_ball = *ball;
 			ball->x = c_half_res.x;
-			ball->y = lerp(ball->y, g_platform_data.mouse.y, 40.0f * delta);
+			ball->y = lerp(ball->y, platform_data.mouse.y, 40.0f * delta);
 			ball->y = clamp(ball->y, 0.0f, c_base_res.y);
 			game->title_color = v3(sinf2(game->total_time), 1, 1);
-			do_ball_trail(old_ball, *ball, 16);
+			do_ball_trail(&game->particles, old_ball, *ball, 16);
 
-			if(g_platform_data.any_key_pressed)
+			if(platform_data.any_key_pressed)
 			{
 				game->state = e_state_game;
 			}
@@ -218,15 +224,15 @@ func void update()
 		case e_state_game:
 		{
 			#ifdef m_debug
-			if(is_key_pressed(c_key_add))
+			if(is_key_pressed(input, c_key_add))
 			{
 				game->beat_level = true;
 			}
-			if(is_key_pressed(c_key_subtract))
+			if(is_key_pressed(input, c_key_subtract))
 			{
 				game->go_to_previous_level = true;
 			}
-			if(is_key_pressed(c_key_f1))
+			if(is_key_pressed(input, c_key_f1))
 			{
 				game->current_level = game->levels.count - 2;
 				game->beat_level = true;
@@ -251,7 +257,7 @@ func void update()
 			if(game->reset_level)
 			{
 				game->reset_level = false;
-				init_levels();
+				init_levels(&game->levels);
 				game->score = 0;
 
 				game->boss_paddle.pos = v2(c_base_res.x - c_boss_paddle_size.x / 2, c_half_res.y);
@@ -339,10 +345,10 @@ func void update()
 			s_ball old_ball = *ball;
 
 			ball->x += ball->dir.x * delta * ball->speed;
-			ball->y = lerp(ball->y, g_platform_data.mouse.y, 40.0f * delta);
+			ball->y = lerp(ball->y, platform_data.mouse.y, 40.0f * delta);
 			ball->y = clamp(ball->y, 0.0f, c_base_res.y);
 
-			do_ball_trail(old_ball, *ball, level->ball_radius);
+			do_ball_trail(&game->particles, old_ball, *ball, level->ball_radius);
 
 			ball->hit_time = at_least(0.0f, ball->hit_time - delta);
 			s_v2 ball_pos_before_collision = ball->pos;
@@ -386,7 +392,7 @@ func void update()
 				ball->dir.x = -ball->dir.x;
 				ball->speed += level->speed_boost;
 				ball->speed = at_most(c_ball_max_speed, ball->speed);
-				g_platform_funcs.play_sound(game->paddle_sound);
+				platform_play_sound(game->paddle_sound);
 
 				if(level->paddles_give_score)
 				{
@@ -395,7 +401,7 @@ func void update()
 				ball->hit_time = c_ball_hit_time;
 
 				float l = at_least(1.0f, powf(ball->speed - 800, 0.1f));
-				spawn_particles(100, {
+				spawn_particles(&game->particles, &game->rng, 100, {
 					.render_type = 1,
 					.speed = 100 * l,
 					.speed_rand = 1,
@@ -431,7 +437,7 @@ func void update()
 					ball->x = boss_paddle->x - c_boss_paddle_size.x / 2.0f - level->ball_radius;
 
 					float l = at_least(1.0f, powf(ball->speed - 800, 0.1f));
-					spawn_particles(100, {
+					spawn_particles(&game->particles, &game->rng, 100, {
 						.render_type = 1,
 						.speed = 100 * l,
 						.speed_rand = 1,
@@ -443,7 +449,7 @@ func void update()
 						.pos = ball_pos_before_collision,
 						.color = v4(0.5f, 0.25f, 0.05f, 1),
 					});
-					g_platform_funcs.play_sound(game->paddle_sound);
+					platform_play_sound(game->paddle_sound);
 					game->score += 1;
 
 					ball->speed += level->speed_boost;
@@ -488,7 +494,7 @@ func void update()
 					{
 						for(int i = 0; i < 32; i++)
 						{
-							spawn_particles(100, {
+							spawn_particles(&game->particles, &game->rng, 100, {
 								.render_type = 1,
 								.speed = 2000,
 								.speed_rand = 1,
@@ -500,7 +506,7 @@ func void update()
 								.pos = v2(boss_paddle->x, c_base_res.y * rng->randf32()),
 								.color = v4(0.5f, 0.25f, 0.05f, 1),
 							});
-							play_delayed_sound(rng->rand_bool() ? game->paddle_sound : game->score_pickup_sound, 0.01f + 0.01f * i);
+							play_delayed_sound(&game->delayed_sounds, rng->rand_bool() ? game->paddle_sound : game->score_pickup_sound, 0.01f + 0.01f * i);
 						}
 					}
 					if(level->obstacles) { game->spawn_obstacles = true; }
@@ -550,7 +556,7 @@ func void update()
 						p.speed = 400 * rng->randf32();
 						game->particles.add(p);
 					}
-					g_platform_funcs.play_sound(game->score_pickup_sound);
+					platform_play_sound(game->score_pickup_sound);
 				}
 			}
 
@@ -559,7 +565,7 @@ func void update()
 				if(circle_collides_circle(ball->pos, level->ball_radius, pickup.pos, level->ball_radius))
 				{
 					game->reset_level = true;
-					g_platform_funcs.play_sound(game->fail_sound);
+					platform_play_sound(game->fail_sound);
 					game->death_pickups.remove_and_swap(pickup_i--);
 
 					s_v4 color = c_death_pickup_color;
@@ -579,7 +585,7 @@ func void update()
 						p.speed = 400 * rng->randf32();
 						game->particles.add(p);
 					}
-					g_platform_funcs.play_sound(game->score_pickup_sound);
+					platform_play_sound(game->score_pickup_sound);
 				}
 			}
 
@@ -588,7 +594,7 @@ func void update()
 				if(circle_collides_circle(ball->pos, level->ball_radius, portal.active, portal.radius))
 				{
 					ball->pos = portal.target;
-					spawn_particles(100, {
+					spawn_particles(&game->particles, &game->rng, 1100, {
 						.render_type = 1,
 						.speed = 400,
 						.speed_rand = 1,
@@ -601,13 +607,13 @@ func void update()
 						.color = c_portal_color,
 						.color_rand = 0.25f,
 					});
-					g_platform_funcs.play_sound(game->portal_sound);
+					platform_play_sound(game->portal_sound);
 				}
 			}
 
 			if(level->boss && game->score == 99)
 			{
-				spawn_particles(1, {
+				spawn_particles(&game->particles, &game->rng, 11, {
 					.render_type = 1,
 					.speed = 400,
 					.speed_rand = 1,
@@ -626,7 +632,7 @@ func void update()
 			if(ball->x > c_base_res.x + level->ball_radius || ball->x < -level->ball_radius)
 			{
 				game->reset_level = true;
-				g_platform_funcs.play_sound(game->fail_sound);
+				platform_play_sound(game->fail_sound);
 			}
 
 			if(game->score >= level->score_to_beat)
@@ -640,7 +646,7 @@ func void update()
 				if(game->current_level == game->levels.count - 1)
 				{
 					game->state = e_state_victory;
-					g_platform_data.any_key_pressed = false;
+					platform_data.any_key_pressed = false;
 				}
 				else
 				{
@@ -650,7 +656,7 @@ func void update()
 				game->spawn_portals = false;
 				game->score = 0;
 				ball->speed = game->levels[game->current_level].ball_speed;
-				g_platform_funcs.play_sound(game->win_sound);
+				platform_play_sound(game->win_sound);
 				game->reset_level = true;
 			}
 
@@ -672,11 +678,11 @@ func void update()
 		{
 			game->title_color = v3(sinf2(game->total_time), 1, 1);
 
-			if(is_key_pressed(c_key_escape))
+			if(is_key_pressed(input, c_key_escape))
 			{
 				exit(0);
 			}
-			else if(g_platform_data.any_key_pressed)
+			else if(platform_data.any_key_pressed)
 			{
 				game->state = e_state_game;
 				game->reset_game = true;
@@ -705,7 +711,7 @@ func void update()
 		sound->time += delta;
 		if(sound->time >= sound->delay)
 		{
-			g_platform_funcs.play_sound(sound->sound);
+			platform_play_sound(sound->sound);
 			game->delayed_sounds.remove_and_swap(sound_i--);
 		}
 	}
@@ -713,18 +719,18 @@ func void update()
 
 }
 
-func void render(float dt)
+func void render(s_game_window *game_window, s_game *game, float dt)
 {
 
 	switch(game->state)
 	{
 		case e_state_main_menu:
 		{
-			draw_text("GNOP", game->title_pos, 15, v4(hsv_to_rgb(game->title_color), 1), e_font_huge, true);
+			draw_text("GNOP", game->title_pos, 15, v4(hsv_to_rgb(game->title_color), 1), game->font_arr, e_font_huge, true);
 			draw_circle(game->ball.pos, 5, 16, v4(1));
-			draw_text("Control the Ball with the Mouse", v2(c_half_res.x, c_base_res.y * 0.7f), 15, v4(1), e_font_big, true);
-			draw_text("Press Any Key to Start", v2(c_half_res.x, c_base_res.y * 0.8f), 15, v4(1), e_font_big, true);
-			draw_text("Made Live at twitch.tv/Tkap1", v2(c_half_res.x, c_base_res.y * 0.9f), 15, make_color(0.5f), e_font_medium, true);
+			draw_text("Control the Ball with the Mouse", v2(c_half_res.x, c_base_res.y * 0.7f), 15, v4(1), game->font_arr, e_font_big, true);
+			draw_text("Press Any Key to Start", v2(c_half_res.x, c_base_res.y * 0.8f), 15, v4(1), game->font_arr, e_font_big, true);
+			draw_text("Made Live at twitch.tv/Tkap1", v2(c_half_res.x, c_base_res.y * 0.9f), 15, make_color(0.5f), game->font_arr, e_font_medium, true);
 		} break;
 
 		case e_state_game:
@@ -738,7 +744,7 @@ func void render(float dt)
 				draw_rect(game->boss_paddle.pos, 10, c_boss_paddle_size, v4(1));
 			}
 
-			draw_text(format_text("%i/%i", game->score, level.score_to_beat), c_half_res * v2(1, 0.5f), 15, v4(1), e_font_big, true);
+			draw_text(format_text("%i/%i", game->score, level.score_to_beat), c_half_res * v2(1, 0.5f), 15, v4(1), game->font_arr, e_font_big, true);
 
 			foreach_raw(pickup_i, pickup, game->score_pickups)
 			{
@@ -767,16 +773,16 @@ func void render(float dt)
 				draw_circle(portal.target, 5, portal.radius * 0.6f * s, v4(0.01f, 0.01f, 0.01f, 1));
 			}
 
-			draw_text(format_text("Level: %i", game->current_level + 1), v2(0,0), 4, make_color(1), e_font_medium, false);
+			draw_text(format_text("Level: %i", game->current_level + 1), v2(0,0), 4, make_color(1), game->font_arr, e_font_medium, false);
 		} break;
 
 		case e_state_victory:
 		{
-			draw_text("Congratulations! You win!", v2(c_half_res.x, c_base_res.y * 0.3f), 15, v4(hsv_to_rgb(game->title_color), 1), e_font_big, true);
-			draw_text("Press Any Key to Replay", v2(c_half_res.x, c_base_res.y * 0.5f), 15, v4(1), e_font_big, true);
-			draw_text("Press Escape to Exit", v2(c_half_res.x, c_base_res.y * 0.6f), 15, v4(1), e_font_big, true);
-			draw_text("Get the source code at https://github.com/Tkap1/gmtk_jam_gnop", v2(c_half_res.x, c_base_res.y * 0.8f), 15, make_color(0.5f), e_font_medium, true);
-			draw_text("Made Live at twitch.tv/Tkap1", v2(c_half_res.x, c_base_res.y * 0.9f), 15, make_color(0.5f), e_font_medium, true);
+			draw_text("Congratulations! You win!", v2(c_half_res.x, c_base_res.y * 0.3f), 15, v4(hsv_to_rgb(game->title_color), 1), game->font_arr, e_font_big, true);
+			draw_text("Press Any Key to Replay", v2(c_half_res.x, c_base_res.y * 0.5f), 15, v4(1), game->font_arr, e_font_big, true);
+			draw_text("Press Escape to Exit", v2(c_half_res.x, c_base_res.y * 0.6f), 15, v4(1), game->font_arr, e_font_big, true);
+			draw_text("Get the source code at https://github.com/Tkap1/gmtk_jam_gnop", v2(c_half_res.x, c_base_res.y * 0.8f), 15, make_color(0.5f), game->font_arr, e_font_medium, true);
+			draw_text("Made Live at twitch.tv/Tkap1", v2(c_half_res.x, c_base_res.y * 0.9f), 15, make_color(0.5f), game->font_arr, e_font_medium, true);
 		} break;
 
 		invalid_default_case;
@@ -804,13 +810,13 @@ func void render(float dt)
 		glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 		glClearDepth(0.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glViewport(0, 0, g_window.width, g_window.height);
+		glViewport(0, 0, game_window->width, game_window->height);
 		// glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_GREATER);
 
 		{
 			int location = glGetUniformLocation(game->programs[e_shader_default], "window_size");
-			glUniform2fv(location, 1, &g_window.size.x);
+			glUniform2fv(location, 1, &game_window->size.x);
 		}
 		{
 			int location = glGetUniformLocation(game->programs[e_shader_default], "time");
@@ -861,7 +867,9 @@ func void render(float dt)
 	}
 
 	#ifdef m_debug
+	#ifdef _WIN32
 	hot_reload_shaders();
+	#endif // _WIN32
 	#endif // m_debug
 }
 
@@ -874,7 +882,7 @@ func b8 check_for_shader_errors(u32 id, char* out_error)
 	if(!compile_success)
 	{
 		glGetShaderInfoLog(id, 1024, null, info_log);
-		log("Failed to compile shader:\n%s", info_log);
+		fprintf(stderr,"Failed to compile shader:\n%s\n", info_log);
 
 		if(out_error)
 		{
@@ -998,11 +1006,10 @@ func s_texture load_texture_from_file(char* path, u32 filtering)
 	return texture;
 }
 
-func s_v2 get_text_size_with_count(const char* text, e_font font_id, int count)
+func s_v2 get_text_size_with_count(const char* text, s_font *font, int count)
 {
 	assert(count >= 0);
 	if(count <= 0) { return zero; }
-	s_font* font = &game->font_arr[font_id];
 
 	s_v2 size = zero;
 	size.y = font->size;
@@ -1017,13 +1024,14 @@ func s_v2 get_text_size_with_count(const char* text, e_font font_id, int count)
 	return size;
 }
 
-func s_v2 get_text_size(const char* text, e_font font_id)
+func s_v2 get_text_size(const char* text, s_font *font)
 {
-	return get_text_size_with_count(text, font_id, (int)strlen(text));
+	return get_text_size_with_count(text, font, (int)strlen(text));
 }
 
 
 #ifdef m_debug
+#ifdef _WIN32
 func void hot_reload_shaders(void)
 {
 	for(int shader_i = 0; shader_i < e_shader_count; shader_i++)
@@ -1054,9 +1062,10 @@ func void hot_reload_shaders(void)
 	}
 
 }
+#endif // _WIN32
 #endif // m_debug
 
-func u32 load_shader(const char* vertex_path, const char* fragment_path)
+func u32 load_shader(const char* vertex_path, const char* fragment_path, s_lin_arena *frame_arena)
 {
 	u32 vertex = glCreateShader(GL_VERTEX_SHADER);
 	u32 fragment = glCreateShader(GL_FRAGMENT_SHADER);
@@ -1085,28 +1094,28 @@ func u32 load_shader(const char* vertex_path, const char* fragment_path)
 
 
 
-func b8 is_key_down(int key)
+func b8 is_key_down(s_input *input, int key)
 {
 	assert(key < c_max_keys);
-	return g_input->keys[key].is_down || g_input->keys[key].count >= 2;
+	return input->keys[key].is_down || input->keys[key].count >= 2;
 }
 
-func b8 is_key_up(int key)
+func b8 is_key_up(s_input *input, int key)
 {
 	assert(key < c_max_keys);
-	return !g_input->keys[key].is_down;
+	return !input->keys[key].is_down;
 }
 
-func b8 is_key_pressed(int key)
+func b8 is_key_pressed(s_input *input, int key)
 {
 	assert(key < c_max_keys);
-	return (g_input->keys[key].is_down && g_input->keys[key].count == 1) || g_input->keys[key].count > 1;
+	return (input->keys[key].is_down && input->keys[key].count == 1) || input->keys[key].count > 1;
 }
 
-func b8 is_key_released(int key)
+func b8 is_key_released(s_input *input, int key)
 {
 	assert(key < c_max_keys);
-	return (!g_input->keys[key].is_down && g_input->keys[key].count == 1) || g_input->keys[key].count > 1;
+	return (!input->keys[key].is_down && input->keys[key].count == 1) || input->keys[key].count > 1;
 }
 
 void gl_debug_callback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
@@ -1147,26 +1156,26 @@ func s_level make_level()
 	return level;
 }
 
-func void init_levels()
+func void init_levels(s_sarray<s_level, 128> *levels)
 {
-	game->levels.count = 0;
+	levels->count = 0;
 
 	// @Note(tkap, 08/07/2023): Basic
 	{
 		s_level level = make_level();
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
 		s_level level = make_level();
 		level.paddle_size.y *= 0.75f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
 		s_level level = make_level();
 		level.paddle_size.y *= 0.5f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Slow then fast
@@ -1175,7 +1184,7 @@ func void init_levels()
 		level.ball_speed *= 0.5f;
 		level.speed_boost = 3000;
 		level.score_to_beat = 2;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1183,7 +1192,7 @@ func void init_levels()
 		level.ball_speed *= 0.5f;
 		level.speed_boost = 2000;
 		level.score_to_beat = 3;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1191,7 +1200,7 @@ func void init_levels()
 		level.ball_speed *= 0.5f;
 		level.speed_boost = 1200;
 		level.score_to_beat = 4;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Collect
@@ -1200,7 +1209,7 @@ func void init_levels()
 		level.spawn_pickups = true;
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1210,7 +1219,7 @@ func void init_levels()
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
 		level.speed_boost *= 0.5f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1220,28 +1229,28 @@ func void init_levels()
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
 		level.speed_boost *= 0.5f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Moving paddles
 	{
 		s_level level = make_level();
 		level.moving_paddles = true;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
 		s_level level = make_level();
 		level.moving_paddles = true;
 		level.paddle_speed *= 2;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
 		s_level level = make_level();
 		level.moving_paddles = true;
 		level.paddle_speed *= 2.5f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Synced paddles
@@ -1253,7 +1262,7 @@ func void init_levels()
 		level.paddle_size.y *= 2;
 		level.ball_speed *= 3;
 		level.speed_boost *= 4;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1264,7 +1273,7 @@ func void init_levels()
 		level.paddle_size.y *= 1.5f;
 		level.ball_speed *= 3;
 		level.speed_boost *= 4;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1275,7 +1284,7 @@ func void init_levels()
 		level.paddle_size.y *= 1.0f;
 		level.ball_speed *= 3;
 		level.speed_boost *= 4;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Obstacles
@@ -1285,7 +1294,7 @@ func void init_levels()
 		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 8;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1294,7 +1303,7 @@ func void init_levels()
 		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 12;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1303,7 +1312,7 @@ func void init_levels()
 		level.score_to_beat = 8;
 		level.ball_speed *= 0.5f;
 		level.obstacle_radius = 16;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Portals
@@ -1313,7 +1322,7 @@ func void init_levels()
 		level.portals = true;
 		level.ball_speed *= 0.25f;
 		level.speed_boost *= 0.25f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1323,7 +1332,7 @@ func void init_levels()
 		level.portal_radius *= 0.75f;
 		level.ball_speed *= 0.33f;
 		level.speed_boost *= 0.25f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1334,7 +1343,7 @@ func void init_levels()
 		level.ball_speed *= 0.5f;
 		level.speed_boost *= 0.25f;
 		level.paddle_size.y *= 2;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Collect + slow then fast
@@ -1346,7 +1355,7 @@ func void init_levels()
 		level.paddles_give_score = false;
 		level.score_to_beat = 3;
 		level.paddle_size.y *= 2;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1357,7 +1366,7 @@ func void init_levels()
 		level.paddles_give_score = false;
 		level.score_to_beat = 4;
 		level.paddle_size.y *= 2;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1368,7 +1377,7 @@ func void init_levels()
 		level.paddles_give_score = false;
 		level.score_to_beat = 5;
 		level.paddle_size.y *= 3;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	// @Note(tkap, 08/07/2023): Moving paddles + portal
@@ -1380,7 +1389,7 @@ func void init_levels()
 		level.portals = true;
 		level.ball_speed *= 0.33f;
 		level.speed_boost *= 0.33f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1392,7 +1401,7 @@ func void init_levels()
 		level.ball_speed *= 0.33f;
 		level.speed_boost *= 0.33f;
 		level.paddle_size.y *= 0.75f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1404,7 +1413,7 @@ func void init_levels()
 		level.ball_speed *= 0.4f;
 		level.speed_boost *= 0.4f;
 		level.paddle_size.y *= 0.5f;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 	{
@@ -1414,12 +1423,12 @@ func void init_levels()
 		level.paddles_give_score = false;
 		level.obstacles = true;
 		level.speed_boost = 0;
-		game->levels.add(level);
+		levels->add(level);
 	}
 
 }
 
-func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)
+func void do_ball_trail(s_sarray<s_particle, 16384> *particles, s_ball old_ball, s_ball ball, float radius)
 {
 	float movement = v2_length(ball.pos - old_ball.pos);
 	int count = ceilfi(movement / radius * 8);
@@ -1435,41 +1444,41 @@ func void do_ball_trail(s_ball old_ball, s_ball ball, float radius)
 		particle.color = get_ball_color(temp);
 		particle.duration = 0.15f;
 		particle.render_type = 0;
-		game->particles.add_checked(particle);
+		particles->add_checked(particle);
 	}
 }
 
-func char* handle_plural(int num)
+func const char* handle_plural(int num)
 {
 	return (num == 1 || num == -1) ? "" : "s";
 }
 
-func void spawn_particles(int count, s_particle_spawn_data data)
+func void spawn_particles(s_sarray<s_particle, 16384> *particles, s_rng *rng, int count, s_particle_spawn_data data)
 {
 	for(int i = 0; i < count; i++)
 	{
 		s_particle p = zero;
 		p.render_type = data.render_type;
-		p.duration = data.duration * (1 - data.duration_rand * game->rng.randf32());
-		p.speed = data.speed * (1 - data.speed_rand * game->rng.randf32());
-		p.radius = data.radius * (1 - data.radius_rand * game->rng.randf32());
+		p.duration = data.duration * (1 - data.duration_rand * rng->randf32());
+		p.speed = data.speed * (1 - data.speed_rand * rng->randf32());
+		p.radius = data.radius * (1 - data.radius_rand * rng->randf32());
 		p.pos = data.pos;
 
-		float foo = (float)game->rng.randf2() * data.angle_rand * tau;
+		float foo = (float)rng->randf2() * data.angle_rand * tau;
 		float angle = data.angle + foo;
 		p.dir = v2_from_angle(angle);
-		p.color.x = data.color.x * (1 - data.color_rand * game->rng.randf32());
-		p.color.y = data.color.y * (1 - data.color_rand * game->rng.randf32());
-		p.color.z = data.color.z * (1 - data.color_rand * game->rng.randf32());
+		p.color.x = data.color.x * (1 - data.color_rand * rng->randf32());
+		p.color.y = data.color.y * (1 - data.color_rand * rng->randf32());
+		p.color.z = data.color.z * (1 - data.color_rand * rng->randf32());
 		p.color.w = data.color.w;
-		game->particles.add_checked(p);
+		particles->add_checked(p);
 	}
 }
 
-func void play_delayed_sound(s_sound sound, float delay)
+func void play_delayed_sound(s_sarray<s_delayed_sound, 64> *delayed_sounds, s_sound sound, float delay)
 {
 	s_delayed_sound s = zero;
 	s.sound = sound;
 	s.delay = delay;
-	game->delayed_sounds.add_checked(s);
+	delayed_sounds->add_checked(s);
 }

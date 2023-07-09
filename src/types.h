@@ -23,3 +23,7 @@ constexpr float c_max_f32 = 999999999.0f;
 #define func static
 #define global static
 #define null NULL
+
+#ifdef __linux__
+typedef int BOOL;
+#endif

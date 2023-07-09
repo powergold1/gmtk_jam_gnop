@@ -16,17 +16,7 @@
 
 #define array_count(arr) (sizeof((arr)) / sizeof((arr)[0]))
 
-#ifndef _WIN32
-#define max(a,b) (a)<(b)?(b):(a)
-#define min(a,b) (a)<(b)?(a):(b)
-#endif
 #define STUB(X) printf("STUBBED: %s\n", X)
-
-#ifdef m_server
-#define log(...) printf("Server: "  __VA_ARGS__); printf("\n")
-#else // m_server
-#define log(...) printf("Client: " __VA_ARGS__); printf("\n")
-#endif
 
 func void on_failed_assert(const char* cond, const char* file, int line);
 
@@ -72,6 +62,7 @@ func char* format_text(const char* text, ...)
 
 func void on_failed_assert(const char* cond, const char* file, int line)
 {
+#ifdef _WIN32
 	char* text = format_text("FAILED ASSERT IN %s (%i)\n%s\n", file, line, cond);
 	printf("%s\n", text);
 	int result = MessageBox(null, text, "Assertion failed", MB_RETRYCANCEL | MB_TOPMOST);
@@ -86,6 +77,11 @@ func void on_failed_assert(const char* cond, const char* file, int line)
 			exit(1);
 		}
 	}
+#endif
+#ifdef __linux__
+	fprintf(stderr, "FAILED ASSERT IN %s:%i\n%s\n", file, line, cond);
+	abort();
+#endif
 }
 
 

@@ -1,4 +1,4 @@
-
+#pragma once
 
 global constexpr s_v2 c_base_res = {1366, 768};
 global constexpr s_v2 c_half_res = {1366 / 2.0f, 768 / 2.0f};
@@ -7,7 +7,7 @@ global constexpr int c_num_channels = 2;
 global constexpr int c_sample_rate = 44100;
 global constexpr int c_max_concurrent_sounds = 16;
 
-#define c_updates_per_second (1000)
+#define c_updates_per_second (100)
 #define c_update_delay (1.0 / c_updates_per_second)
 
 #define c_origin_topleft {1.0f, -1.0f}
